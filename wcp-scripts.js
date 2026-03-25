@@ -1,14 +1,57 @@
-jQuery(document).ready(function($){
-    // Mostra/nasconde info placeholder per l'email
+jQuery(function($){
+
+    // Attiva Select2 prodotti
+    $('#wcp-products').select2({
+        width: '100%',
+        placeholder: 'Cerca e seleziona i prodotti',
+        minimumInputLength: 2,
+        ajax: {
+            url: wcp_ajax.ajax_url,
+            dataType: 'json',
+            delay: 250,
+            data: function(params) {
+                return {
+                    q: params.term,
+                    nonce: wcp_ajax.products_nonce,
+                    type: 'products'
+                };
+            },
+            processResults: function(data) {
+                return { results: data.results };
+            }
+        }
+    });
+
+    // Attiva Select2 categorie
+    $('#wcp-categories').select2({
+        width: '100%',
+        placeholder: 'Cerca e seleziona le categorie',
+        minimumInputLength: 2,
+        ajax: {
+            url: wcp_ajax.ajax_url,
+            dataType: 'json',
+            delay: 250,
+            data: function(params) {
+                return {
+                    q: params.term,
+                    nonce: wcp_ajax.categories_nonce,
+                    type: 'categories'
+                };
+            },
+            processResults: function(data) {
+                return { results: data.results };
+            }
+        }
+    });
+
+    // Email nota UX
     $('#wcp-email').on('focus', function(){
-        $(this).siblings('.wcpcm-note')
-            .text("Inserisci un’email valida a cui abilitare il coupon")
-            .fadeIn(180);
+        $(this).siblings('.wcpcm-note').text("Inserisci un’email valida per abilitare il coupon.").fadeIn(180);
     }).on('blur', function(){
         $(this).siblings('.wcpcm-note').fadeOut(120);
     });
 
-    // Validazione lato client e invio AJAX
+    // Validazione e submit AJAX
     $('#wcp-coupon-form').on('submit', function(e){
         e.preventDefault();
 
@@ -18,7 +61,7 @@ jQuery(document).ready(function($){
         let email   = $('#wcp-email').val();
         let $form   = $(this);
 
-        // Reset colori input
+        // Reset colori
         $form.find('.wcpcm-input').css('border-color','#d8e2ff');
 
         // Validazione percentuale
@@ -27,7 +70,6 @@ jQuery(document).ready(function($){
             msg += '<div>Inserisci una percentuale di sconto valida (1-100)</div>';
             $('#wcp-amount').css('border-color','#c0392b');
         }
-
         // Validazione email
         let emailregex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if(!email || !emailregex.test(email)){
@@ -53,7 +95,7 @@ jQuery(document).ready(function($){
                 if(response.success){
                     $('#wcp-form-msg').html('<div class="wcpcm-success">' + response.data.msg + '<br><b>Codice: ' + response.data.code + '</b></div>');
                     $form[0].reset();
-                    // Facoltativo: ricarica la tabella codici (con AJAX o reload), qui puoi farlo con location.reload();
+                    $('#wcp-products, #wcp-categories').val(null).trigger('change');
                     setTimeout(()=>{ location.reload(); }, 1600);
                 } else {
                     $('#wcp-form-msg').html('<div class="wcpcm-error">'+response.data.msg+'</div>');
@@ -66,16 +108,4 @@ jQuery(document).ready(function($){
 
         return false;
     });
-
-    // OPTIONAL: select2 per prodotti/categorie (se usi ajax per popolamento)
-    if(typeof $.fn.select2 !== "undefined"){
-        $('#wcp-products, #wcp-categories').select2({
-            width: '100%',
-            placeholder: 'Seleziona...',
-            allowClear: true,
-            ajax: function(){
-                // Qui puoi aggiungere configurazioni per ajax product/category search
-            }
-        });
-    }
 });
