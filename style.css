@@ -1,4 +1,4 @@
-/* === STILE PLUGIN PERSONAL COUPON MANAGER === */
+/* === STILE PLUGIN PERSONAL COUPON MANAGER + Select2 OK === */
 
 .wcpcm-form-container {
     max-width: 600px;
@@ -42,7 +42,7 @@
     outline: none;
 }
 
-/* --- Select2 uniformato agli input custom --- */
+/* --- Integrazione stile Select2 --- */
 
 .select2-container--default .select2-selection--multiple {
     min-height: 42px;
@@ -55,19 +55,15 @@
     font-family: inherit;
     transition: border-color 0.2s;
 }
-
 .select2-container--default.select2-container--focus .select2-selection--multiple {
     border-color: #3971e6;
     box-shadow: 0 0 0 2px #cbe3fd77;
 }
-
 .select2-container .select2-search--inline .select2-search__field {
     font-family: inherit;
     font-size: 1em;
     color: #274690;
 }
-
-/* Tag scelti */
 .select2-container--default .select2-selection--multiple .select2-selection__choice {
     background: #eaf0fe;
     color: #274690;
@@ -78,15 +74,11 @@
     font-family: inherit;
     padding: 0.25em 0.65em 0.22em 0.85em;
 }
-
-/* Croce ("x" rimuovi) */
 .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
     color: #3971e6;
     margin-right: 0.2em;
     font-size: 1.1em;
 }
-
-/* Highlight e opzioni del dropdown */
 .select2-container--default .select2-results__option--highlighted[aria-selected] {
     background-color: #cbe3fd;
     color: #234278;
@@ -95,27 +87,19 @@
     border-radius: 7px;
     border: 1px solid #d8e2ff;
 }
-
-/* Larghezza coerente col form */
 .select2-container {
     width: 100% !important;
 }
 .select2-container .select2-selection--multiple {
     min-height: 42px;
 }
-
-/* Allinea il font con gli altri input */
 .select2-container .select2-selection--single,
 .select2-container .select2-selection--multiple {
     font-family: inherit;
 }
-
-/* Spaziatura etichetta/Select2 */
 .wcpcm-form-group label + .select2 {
     margin-top: 0.25em;
 }
-
-/* Correzione focus per top spacing */
 .select2-container .select2-selection--multiple:focus-visible {
     outline: none;
 }
