@@ -1,8 +1,8 @@
 <?php
 /*
 Plugin Name: WooCommerce Personal Coupon Manager
-Description: Gestione coupon dall'area "Il mio account" solo per admin e utente 5584.
-Version: 1.3
+Description: Gestione coupon dall'area "Il mio account" solo per admin e utente 5584, con interfaccia moderna.
+Version: 2.0
 Author: Inamo87100
 */
 
@@ -62,8 +62,8 @@ class WC_Personal_Coupon_Manager {
                 );
 
                 // Custom CSS+JS
-                wp_enqueue_style('wcp-style', plugin_dir_url(__FILE__).'style.css', [], '1.3');
-                wp_enqueue_script('wcp-ajax', plugin_dir_url(__FILE__).'wcp-scripts.js', ['jquery', 'select2'], '1.3', true);
+                wp_enqueue_style('wcp-style', plugin_dir_url(__FILE__).'style.css', [], '2.0');
+                wp_enqueue_script('wcp-ajax', plugin_dir_url(__FILE__).'wcp-scripts.js', ['jquery', 'select2'], '2.0', true);
 
                 // Nonce JSON search WC
                 $search_products_nonce   = wp_create_nonce('search-products');
@@ -82,31 +82,39 @@ class WC_Personal_Coupon_Manager {
     // 5. Form + lista coupon (tab)
     public function endpoint_content() {
         if (!$this->can_access()) {
-            echo '<p>Non hai i permessi per accedere a questa sezione.</p>';
+            echo '<div class="wcpcm-form-container"><p>Non hai i permessi per accedere a questa sezione.</p></div>';
             return;
         }
         ?>
-        <h2>Crea un nuovo codice sconto</h2>
-        <form id="wcp-coupon-form">
-            <label>Percentuale Sconto (%) <span style="color:red">*</span>
-                <input type="number" name="amount" required min="1" max="100">
-            </label>
-            <label>Prodotti (opzionale)
-                <select name="products[]" id="wcp-products" multiple="multiple"></select>
-            </label>
-            <label>Categorie (opzionale)
-                <select name="categories[]" id="wcp-categories" multiple="multiple"></select>
-            </label>
-            <label>Email Utente Abilitato <span style="color:red">*</span>
-                <input type="email" name="email" required>
-            </label>
-            <button type="submit">Crea codice</button>
-        </form>
-        <div id="wcp-form-msg"></div>
-        <hr>
-        <h2>Codici sconto creati</h2>
+        <div class="wcpcm-form-container">
+            <h2 style="margin-bottom:1em;color:#274690;">Crea un nuovo codice sconto</h2>
+            <form id="wcp-coupon-form" class="wcpcm-create-coupon-form">
+                <div class="wcpcm-form-group">
+                    <label class="wcpcm-label" for="wcp-amount">Percentuale Sconto (%) <span style="color:red">*</span></label>
+                    <input class="wcpcm-input" type="number" name="amount" id="wcp-amount" required min="1" max="100" placeholder="Es: 10">
+                </div>
+                <div class="wcpcm-form-group">
+                    <label class="wcpcm-label" for="wcp-products">Prodotti (opzionale)</label>
+                    <select name="products[]" id="wcp-products" multiple="multiple" class="wcpcm-input"></select>
+                </div>
+                <div class="wcpcm-form-group">
+                    <label class="wcpcm-label" for="wcp-categories">Categorie (opzionale)</label>
+                    <select name="categories[]" id="wcp-categories" multiple="multiple" class="wcpcm-input"></select>
+                </div>
+                <div class="wcpcm-form-group">
+                    <label class="wcpcm-label" for="wcp-email">Email Utente Abilitato <span style="color:red">*</span></label>
+                    <input class="wcpcm-input" type="email" name="email" id="wcp-email" required placeholder="Inserisci email abilitata">
+                    <div class="wcpcm-note" style="display:none"></div>
+                </div>
+                <button class="wcpcm-btn" type="submit">Crea codice</button>
+            </form>
+            <div id="wcp-form-msg"></div>
+        </div>
+        <div class="wcpcm-table-container">
+            <h3 style="color:#274690; margin:1.8em 0 0.8em 0;">Codici sconto creati</h3>
+            <?php $this->list_coupons(); ?>
+        </div>
         <?php
-        $this->list_coupons();
     }
 
     // 6. Creazione coupon via AJAX
@@ -180,13 +188,13 @@ class WC_Personal_Coupon_Manager {
             return;
         }
 
-        echo '<table><tr>
+        echo '<table class="wcpcm-table"><thead><tr>
         <th>Codice</th>
         <th>Sconto (%)</th>
         <th>Email abilitata</th>
         <th>Prodotti</th>
         <th>Categorie</th>
-        <th>Creato il</th></tr>';
+        <th>Creato il</th></tr></thead><tbody>';
 
         foreach ($coupons as $coupon) {
             $amount = get_post_meta($coupon->ID, 'coupon_amount', true);
@@ -231,7 +239,7 @@ class WC_Personal_Coupon_Manager {
             <td>".date('d/m/Y', strtotime($coupon->post_date))."</td>
             </tr>";
         }
-        echo '</table>';
+        echo '</tbody></table>';
     }
 }
 
