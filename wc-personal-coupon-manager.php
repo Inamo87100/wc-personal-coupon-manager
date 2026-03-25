@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Personal Coupon Manager
 Description: Gestione coupon dall'area "Il mio account" solo per admin e utente 5584.
-Version: 1.2
+Version: 1.3
 Author: Inamo87100
 */
 
@@ -62,8 +62,8 @@ class WC_Personal_Coupon_Manager {
                 );
 
                 // Custom CSS+JS
-                wp_enqueue_style('wcp-style', plugin_dir_url(__FILE__).'style.css', [], '1.2');
-                wp_enqueue_script('wcp-ajax', plugin_dir_url(__FILE__).'wcp-scripts.js', ['jquery', 'select2'], '1.2', true);
+                wp_enqueue_style('wcp-style', plugin_dir_url(__FILE__).'style.css', [], '1.3');
+                wp_enqueue_script('wcp-ajax', plugin_dir_url(__FILE__).'wcp-scripts.js', ['jquery', 'select2'], '1.3', true);
 
                 // Nonce JSON search WC
                 $search_products_nonce   = wp_create_nonce('search-products');
@@ -127,7 +127,7 @@ class WC_Personal_Coupon_Manager {
             wp_send_json_error(['msg' => "Compila tutti i campi obbligatori e inserisci un'email valida."]);
         }
 
-        // DB: meta email_restrictions DEVE essere sempre array serializzato
+        // Mail come array
         $email_arr = [$email];
 
         // Crea codice coupon unico
@@ -142,12 +142,13 @@ class WC_Personal_Coupon_Manager {
         ];
         $new_coupon_id = wp_insert_post($coupon);
 
-        // Meta obbligatori per la tua specifica
+        // Meta obbligatori
         update_post_meta($new_coupon_id, 'discount_type', 'percent');
         update_post_meta($new_coupon_id, 'coupon_amount', $amount);
         update_post_meta($new_coupon_id, 'individual_use', 'yes');
         update_post_meta($new_coupon_id, 'usage_limit', 1);
-        update_post_meta($new_coupon_id, 'email_restrictions', $email_arr); // Sempre array
+        update_post_meta($new_coupon_id, 'email_restrictions', $email_arr); // legacy, opzionale
+        update_post_meta($new_coupon_id, 'customer_email', $email_arr);     // fondamentale per backend WooCommerce
 
         if (!empty($products)) {
             update_post_meta($new_coupon_id, 'product_ids', implode(',', $products));
@@ -190,14 +191,17 @@ class WC_Personal_Coupon_Manager {
         foreach ($coupons as $coupon) {
             $amount = get_post_meta($coupon->ID, 'coupon_amount', true);
 
-            // Sempre array, preleva il primo elemento
-            $email_list = get_post_meta($coupon->ID, 'email_restrictions', true);
+            // Recupera l'email da customer_email (array), se mancante fallback su email_restrictions
+            $email_list = get_post_meta($coupon->ID, 'customer_email', true);
+            if (empty($email_list)) {
+                $email_list = get_post_meta($coupon->ID, 'email_restrictions', true);
+            }
             $email = is_array($email_list) ? reset($email_list) : $email_list;
 
             $prods_string = get_post_meta($coupon->ID, 'product_ids', true);
             $cats_string  = get_post_meta($coupon->ID, 'product_categories', true);
 
-            // Recupero nomi amichevoli
+            // Nomi prodotti
             $prod_names = '';
             if ($prods_string) {
                 $prods = explode(',', $prods_string);
@@ -207,6 +211,7 @@ class WC_Personal_Coupon_Manager {
                 $prod_names = implode(', ', $prod_titles);
             }
 
+            // Nomi categorie
             $cat_names = '';
             if ($cats_string) {
                 $cats = explode(',', $cats_string);
