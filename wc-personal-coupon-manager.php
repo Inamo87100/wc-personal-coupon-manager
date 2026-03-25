@@ -1,13 +1,14 @@
 <?php
 /*
 Plugin Name: WooCommerce Personal Coupon Manager
-Description: Gestione coupon dall'area "Il mio account" solo per admin e utente 5584, con barra prodotti/categorie in stile WooCommerce.
+Description: Gestione coupon dall'area "Il mio account" solo per admin e utente 5584, con selezione prodotti/categorie stile WooCommerce.
 Version: 2.2
 Author: Inamo87100
 */
 if (!defined('ABSPATH')) exit;
 
 class WC_Personal_Coupon_Manager {
+
     public function __construct() {
         add_action('init', [$this, 'add_my_account_endpoint']);
         add_filter('woocommerce_account_menu_items', [$this, 'add_menu_item']);
@@ -24,9 +25,9 @@ class WC_Personal_Coupon_Manager {
 
     public function add_menu_item($items) {
         if ($this->can_access()) {
-            $items = array_slice($items, 0, 1, true) +
-                     ['codici-sconto' => 'Codici sconto'] +
-                     array_slice($items, 1, null, true);
+            $items = array_slice($items, 0, 1, true)
+                   + ['codici-sconto' => 'Codici sconto']
+                   + array_slice($items, 1, null, true);
         }
         return $items;
     }
@@ -40,19 +41,8 @@ class WC_Personal_Coupon_Manager {
         if (function_exists('is_account_page') && is_account_page()) {
             global $wp;
             if (isset($wp->query_vars['codici-sconto'])) {
-                wp_enqueue_style(
-                    'select2',
-                    'https://cdn.jsdelivr.net/npm/select2@4.1.0/dist/css/select2.min.css',
-                    [],
-                    '4.1.0'
-                );
-                wp_enqueue_script(
-                    'select2',
-                    'https://cdn.jsdelivr.net/npm/select2@4.1.0/dist/js/select2.min.js',
-                    ['jquery'],
-                    '4.1.0',
-                    true
-                );
+                wp_enqueue_style('select2', 'https://cdn.jsdelivr.net/npm/select2@4.1.0/dist/css/select2.min.css', [], '4.1.0');
+                wp_enqueue_script('select2', 'https://cdn.jsdelivr.net/npm/select2@4.1.0/dist/js/select2.min.js', ['jquery'],'4.1.0', true);
                 wp_enqueue_style('wcp-style', plugin_dir_url(__FILE__).'style.css', [], '2.2');
                 wp_enqueue_script('wcp-ajax', plugin_dir_url(__FILE__).'wcp-scripts.js', ['jquery', 'select2'], '2.2', true);
                 $search_products_nonce   = wp_create_nonce('search-products');
@@ -106,18 +96,16 @@ class WC_Personal_Coupon_Manager {
 
     public function handle_coupon_creation() {
         check_ajax_referer('wcp_nonce', 'nonce');
-        if (!$this->can_access()) {
-            wp_send_json_error(['msg' => 'Non hai i permessi.']);
-        }
+        if (!$this->can_access()) wp_send_json_error(['msg' => 'Non hai i permessi.']);
         $amount     = isset($_POST['amount']) ? intval($_POST['amount']) : 0;
-        $products   = isset($_POST['products']) ? array_map('intval', (array)$_POST['products']) : [];
-        $categories = isset($_POST['categories']) ? array_map('intval', (array)$_POST['categories']) : [];
+        $products   = isset($_POST['products']) ? array_map('intval',(array)$_POST['products']) : [];
+        $categories = isset($_POST['categories']) ? array_map('intval',(array)$_POST['categories']) : [];
         $email      = isset($_POST['email']) ? trim(sanitize_email($_POST['email'])) : '';
         if (!$amount || !$email || !is_email($email)) {
             wp_send_json_error(['msg' => "Compila tutti i campi obbligatori e inserisci un'email valida."]);
         }
-        $code = strtolower(wp_generate_password(10, false));
         $email_arr = [$email];
+        $code = strtolower(wp_generate_password(10, false));
         $coupon = [
             'post_title'    => $code,
             'post_content'  => '',
@@ -187,7 +175,6 @@ class WC_Personal_Coupon_Manager {
             echo "<p>Nessun codice trovato.</p>";
             return;
         }
-
         echo '<table class="wcpcm-table"><thead><tr>
         <th>Codice</th>
         <th>Sconto (%)</th>
@@ -195,28 +182,19 @@ class WC_Personal_Coupon_Manager {
         <th>Prodotti</th>
         <th>Categorie</th>
         <th>Creato il</th></tr></thead><tbody>';
-
         foreach ($coupons as $coupon) {
             $amount = get_post_meta($coupon->ID, 'coupon_amount', true);
-
             $email_list = get_post_meta($coupon->ID, 'customer_email', true);
-            if (empty($email_list)) {
-                $email_list = get_post_meta($coupon->ID, 'email_restrictions', true);
-            }
+            if (empty($email_list)) $email_list = get_post_meta($coupon->ID, 'email_restrictions', true);
             $email = is_array($email_list) ? reset($email_list) : $email_list;
-
             $prods_string = get_post_meta($coupon->ID, 'product_ids', true);
             $cats_string  = get_post_meta($coupon->ID, 'product_categories', true);
-
             $prod_names = '';
             if ($prods_string) {
                 $prods = explode(',', $prods_string);
-                $prod_titles = array_map(function($id){
-                    return get_the_title($id);
-                }, array_filter($prods));
+                $prod_titles = array_map(function($id){ return get_the_title($id); }, array_filter($prods));
                 $prod_names = implode(', ', $prod_titles);
             }
-
             $cat_names = '';
             if ($cats_string) {
                 $cats = explode(',', $cats_string);
@@ -226,7 +204,6 @@ class WC_Personal_Coupon_Manager {
                 }, array_filter($cats));
                 $cat_names = implode(', ', $cat_titles);
             }
-
             echo "<tr>
             <td>{$coupon->post_title}</td>
             <td>{$amount}%</td>
