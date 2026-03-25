@@ -1,0 +1,12 @@
+#wcp-coupon-form { margin-bottom: 30px; background: #f8f8f8; padding: 20px; border-radius: 8px; }
+#wcp-coupon-form input[type="text"], #wcp-coupon-form input[type="number"], #wcp-coupon-form input[type="email"], #wcp-coupon-form select {
+    width: 250px;
+    margin-bottom:10px;
+    display:block;
+}
+#wcp-coupon-form button { background: #21759b; color: #fff; padding: 8px 25px; border:none; border-radius: 4px; }
+#wcp-coupon-form label { font-size: 15px; }
+#wcp-form-msg { margin:10px 0;}
+table { width:100%; border-collapse:collapse; }
+th, td { padding:8px 5px; border:1px solid #ccc; }
+.select2-container { min-width: 250px; }
