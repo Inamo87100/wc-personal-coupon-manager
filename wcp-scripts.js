@@ -1,104 +1,123 @@
-jQuery(function($){
-    // Attiva Select2 prodotti
-    $('#wcp-products').select2({
-        width: '100%',
-        placeholder: 'Cerca e seleziona i prodotti',
-        minimumInputLength: 2,
-        ajax: {
-            url: wcp_ajax.ajax_url,
-            dataType: 'json',
-            delay: 250,
-            data: function(params) {
-                return {
-                    q: params.term,
-                    nonce: wcp_ajax.products_nonce,
-                    type: 'products'
-                };
-            },
-            processResults: function(data) {
-                return { results: data.results };
-            }
-        }
-    });
+jQuery(function ($) {
 
-    // Attiva Select2 categorie
-    $('#wcp-categories').select2({
-        width: '100%',
-        placeholder: 'Cerca e seleziona le categorie',
-        minimumInputLength: 2,
-        ajax: {
-            url: wcp_ajax.ajax_url,
-            dataType: 'json',
-            delay: 250,
-            data: function(params) {
-                return {
-                    q: params.term,
-                    nonce: wcp_ajax.categories_nonce,
-                    type: 'categories'
-                };
-            },
-            processResults: function(data) {
-                return { results: data.results };
-            }
-        }
-    });
+    // Aggiorna il credito residuo visualizzato
+    function updateRemainingCredit(value) {
+        $('#wcp-credit-remaining').text('\u20ac' + value);
+    }
 
-    // Email nota UX
-    $('#wcp-email').on('focus', function(){
-        $(this).siblings('.wcpcm-note').text("Inserisci un’email valida per abilitare il coupon.").fadeIn(180);
-    }).on('blur', function(){
-        $(this).siblings('.wcpcm-note').fadeOut(120);
-    });
-
-    // Validazione e submit AJAX
-    $('#wcp-coupon-form').on('submit', function(e){
+    // Submit form creazione coupon
+    $('#wcp-coupon-form').on('submit', function (e) {
         e.preventDefault();
-        let valid   = true;
-        let msg     = '';
-        let amount  = $('#wcp-amount').val();
-        let email   = $('#wcp-email').val();
-        let $form   = $(this);
-        // Reset colori
-        $form.find('.wcpcm-input').css('border-color','#d8e2ff');
-        // Validazione percentuale
-        if(!amount || isNaN(amount) || amount < 1 || amount > 100){
+
+        var $form      = $(this);
+        var amount     = $('#wcp-amount').val();
+        var productId  = $('#wcp-product').val();
+        var email      = $('#wcp-email').val();
+
+        // Reset stili
+        $form.find('.wcpcm-input').css('border-color', '#d8e2ff');
+        $('#wcp-form-msg').html('');
+
+        var valid = true;
+        var errors = [];
+
+        if (!productId) {
             valid = false;
-            msg += '<div>Inserisci una percentuale di sconto valida (1-100)</div>';
-            $('#wcp-amount').css('border-color','#c0392b');
+            errors.push('Seleziona un prodotto.');
+            $('#wcp-product').css('border-color', '#c0392b');
         }
-        // Validazione email
-        let emailregex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if(!email || !emailregex.test(email)){
+        if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
             valid = false;
-            msg += "<div>Inserisci un'email valida</div>";
-            $('#wcp-email').css('border-color','#c0392b');
+            errors.push("Inserisci un importo sconto valido (maggiore di 0).");
+            $('#wcp-amount').css('border-color', '#c0392b');
         }
-        if(!valid){
-            $('#wcp-form-msg').html('<div class="wcpcm-error">'+msg+'</div>');
-            setTimeout(()=>{$('#wcp-form-msg').fadeOut(320)}, 3000);
+        var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!email || !emailRegex.test(email)) {
+            valid = false;
+            errors.push("Inserisci un'email valida.");
+            $('#wcp-email').css('border-color', '#c0392b');
+        }
+
+        if (!valid) {
+            var errHtml = errors.map(function (m) { return '<div>' + m + '</div>'; }).join('');
+            $('#wcp-form-msg').html('<div class="wcpcm-error">' + errHtml + '</div>').show();
             return false;
         }
-        // INVIO AJAX coupon
-        let formData = $form.serialize();
+
+        var $btn = $form.find('.wcpcm-btn');
+        $btn.prop('disabled', true).text('Creazione in corso...');
+
         $.ajax({
-            url: typeof wcp_ajax !== "undefined" ? wcp_ajax.ajax_url : '',
-            type: 'POST',
-            data: formData + '&action=wcp_create_coupon&nonce=' + (wcp_ajax ? wcp_ajax.nonce : ''),
+            url:      wcp_ajax.ajax_url,
+            type:     'POST',
             dataType: 'json',
-            success: function(response){
-                if(response.success){
-                    $('#wcp-form-msg').html('<div class="wcpcm-success">' + response.data.msg + '<br><b>Codice: ' + response.data.code + '</b></div>');
+            data: {
+                action:     'wcp_create_coupon',
+                nonce:      wcp_ajax.nonce,
+                amount:     amount,
+                product_id: productId,
+                email:      email
+            },
+            success: function (response) {
+                if (response.success) {
+                    $('#wcp-form-msg').html(
+                        '<div class="wcpcm-success">' +
+                        response.data.msg +
+                        '<br><b>Codice: ' + response.data.code + '</b>' +
+                        '</div>'
+                    );
+                    updateRemainingCredit(response.data.remaining_credit);
                     $form[0].reset();
-                    $('#wcp-products, #wcp-categories').val(null).trigger('change');
-                    setTimeout(()=>{ location.reload(); }, 1600);
+                    setTimeout(function () { location.reload(); }, 1800);
                 } else {
-                    $('#wcp-form-msg').html('<div class="wcpcm-error">'+response.data.msg+'</div>');
+                    $('#wcp-form-msg').html('<div class="wcpcm-error">' + response.data.msg + '</div>');
                 }
             },
-            error: function(){
+            error: function () {
                 $('#wcp-form-msg').html('<div class="wcpcm-error">Errore di rete, riprova.</div>');
+            },
+            complete: function () {
+                $btn.prop('disabled', false).text('Crea codice');
             }
         });
+
         return false;
+    });
+
+    // Click "Elimina" coupon
+    $(document).on('click', '.wcpcm-btn-delete', function () {
+        var $btn   = $(this);
+        var postId = $btn.data('post-id');
+        var code   = $btn.data('code');
+
+        if (!confirm('Sei sicuro di voler eliminare il codice "' + code + '"?\nL\'importo verrà restituito al tuo credito.')) {
+            return;
+        }
+
+        $btn.prop('disabled', true).text('Eliminazione...');
+
+        $.ajax({
+            url:      wcp_ajax.ajax_url,
+            type:     'POST',
+            dataType: 'json',
+            data: {
+                action:  'wcp_delete_coupon',
+                nonce:   wcp_ajax.delete_nonce,
+                post_id: postId
+            },
+            success: function (response) {
+                if (response.success) {
+                    updateRemainingCredit(response.data.remaining_credit);
+                    $btn.closest('tr').fadeOut(400, function () { $(this).remove(); });
+                } else {
+                    alert(response.data.msg);
+                    $btn.prop('disabled', false).text('Elimina');
+                }
+            },
+            error: function () {
+                alert('Errore di rete, riprova.');
+                $btn.prop('disabled', false).text('Elimina');
+            }
+        });
     });
 });
