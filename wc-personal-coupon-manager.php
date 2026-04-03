@@ -306,10 +306,10 @@ class WC_Personal_Coupon_Manager {
 
         $delete_response = $this->call_remote_api('/wp-json/wcp/v1/delete-coupon?code=' . urlencode($code), 'DELETE', []);
         if (is_wp_error($delete_response)) {
-            wp_send_json_error(['msg' => 'Errore nell'eliminazione del coupon sul sito remoto.']);
+            wp_send_json_error(['msg' => 'Errore nell\'eliminazione del coupon sul sito remoto.']);
         }
         if (empty($delete_response['success'])) {
-            wp_send_json_error(['msg' => 'Il sito remoto non ha confermato l'eliminazione del coupon.']);
+            wp_send_json_error(['msg' => 'Il sito remoto non ha confermato l\'eliminazione del coupon.']);
         }
 
         wp_delete_post($post_id, true);
@@ -318,7 +318,7 @@ class WC_Personal_Coupon_Manager {
 
         wp_send_json_success([
             'msg'              => 'Coupon eliminato. Il credito è stato ripristinato.',
-            'remaining_credit' => number_format($new_remaining, 2, ',', '.');
+            'remaining_credit' => number_format($new_remaining, 2, ',', '.'),
         ]);
     }
 
@@ -405,7 +405,7 @@ class WC_Personal_Coupon_Manager {
         }
 
         if (strpos($base_url, 'https://') !== 0) {
-            return new WP_Error('insecure_url', 'L'URL del sito remoto deve utilizzare HTTPS.');
+            return new WP_Error('insecure_url', 'L\'URL del sito remoto deve utilizzare HTTPS.');
         }
 
         $args = [
@@ -514,14 +514,14 @@ class WC_Personal_Coupon_Manager {
                         foreach ($products_map as $i => $entry) {
                             $name = isset($entry['name']) ? $entry['name'] : '';
                             $pid  = isset($entry['id']) ? $entry['id'] : '';
-                            echo '<div class="wcp-map-row" style="display:flex;gap:8px;margin-bottom:6px;">
+                            echo '<div class="wcp-map-row" style="display:flex;gap:8px;margin-bottom:6px;">';
                             echo '<input type="text" name="wcp_products_map[' . $i . '][name]" value="' . esc_attr($name) . '" placeholder="Nome prodotto" style="flex:2;">';
                             echo '<input type="number" name="wcp_products_map[' . $i . '][id]" value="' . esc_attr($pid) . '" placeholder="ID su Sito B" style="flex:1;">';
                             echo '<button type="button" class="button wcp-remove-row">Rimuovi</button>';
                             echo '</div>';
                         }
                     } else {
-                        echo '<div class="wcp-map-row" style="display:flex;gap:8px;margin-bottom:6px;">
+                        echo '<div class="wcp-map-row" style="display:flex;gap:8px;margin-bottom:6px;">';
                         echo '<input type="text" name="wcp_products_map[0][name]" value="" placeholder="Nome prodotto" style="flex:2;">';
                         echo '<input type="number" name="wcp_products_map[0][id]" value="" placeholder="ID su Sito B" style="flex:1;">';
                         echo '<button type="button" class="button wcp-remove-row">Rimuovi</button>';
