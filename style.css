@@ -1,4 +1,4 @@
-/* === STILE PLUGIN PERSONAL COUPON MANAGER + Select2 OK === */
+/* === STILE PLUGIN PERSONAL COUPON MANAGER === */
 
 .wcpcm-form-container {
     max-width: 600px;
@@ -9,6 +9,42 @@
     box-shadow: 0 4px 32px rgba(40,60,120,0.13);
 }
 
+/* --- Barra credito residuo --- */
+.wcpcm-credit-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5em;
+    background: #eaf0fe;
+    border: 1px solid #d1e1fc;
+    border-radius: 10px;
+    padding: 0.75em 1.2em;
+    margin-bottom: 1.6em;
+    font-size: 1em;
+}
+
+.wcpcm-credit-label {
+    color: #274690;
+    font-weight: 600;
+}
+
+.wcpcm-credit-total {
+    color: #555;
+    font-weight: 500;
+}
+
+.wcpcm-credit-sep {
+    color: #bbb;
+    margin: 0 0.3em;
+}
+
+.wcpcm-credit-remaining {
+    color: #1a7e3a;
+    font-weight: 700;
+    font-size: 1.08em;
+}
+
+/* --- Form --- */
 .wcpcm-form-group {
     margin-bottom: 1.5em;
 }
@@ -42,68 +78,6 @@
     outline: none;
 }
 
-/* --- Integrazione stile Select2 --- */
-
-.select2-container--default .select2-selection--multiple {
-    min-height: 42px;
-    background: #f8faff;
-    border: 1px solid #d8e2ff;
-    border-radius: 8px;
-    box-shadow: none;
-    padding: 0.20em 0.5em 0.05em 0.5em;
-    font-size: 1em;
-    font-family: inherit;
-    transition: border-color 0.2s;
-}
-.select2-container--default.select2-container--focus .select2-selection--multiple {
-    border-color: #3971e6;
-    box-shadow: 0 0 0 2px #cbe3fd77;
-}
-.select2-container .select2-search--inline .select2-search__field {
-    font-family: inherit;
-    font-size: 1em;
-    color: #274690;
-}
-.select2-container--default .select2-selection--multiple .select2-selection__choice {
-    background: #eaf0fe;
-    color: #274690;
-    border: 1px solid #b4c7e7;
-    border-radius: 6px;
-    margin-top: 0.27em;
-    font-size: 0.99em;
-    font-family: inherit;
-    padding: 0.25em 0.65em 0.22em 0.85em;
-}
-.select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
-    color: #3971e6;
-    margin-right: 0.2em;
-    font-size: 1.1em;
-}
-.select2-container--default .select2-results__option--highlighted[aria-selected] {
-    background-color: #cbe3fd;
-    color: #234278;
-}
-.select2-dropdown {
-    border-radius: 7px;
-    border: 1px solid #d8e2ff;
-}
-.select2-container {
-    width: 100% !important;
-}
-.select2-container .select2-selection--multiple {
-    min-height: 42px;
-}
-.select2-container .select2-selection--single,
-.select2-container .select2-selection--multiple {
-    font-family: inherit;
-}
-.wcpcm-form-group label + .select2 {
-    margin-top: 0.25em;
-}
-.select2-container .select2-selection--multiple:focus-visible {
-    outline: none;
-}
-
 /* Responsive fix su mobile */
 @media (max-width: 700px) {
     .wcpcm-form-container, .wcpcm-table-container {
@@ -116,13 +90,17 @@
         padding-right: 0.45em;
         font-size: 0.96em;
     }
-    .select2-container .select2-selection--multiple {
-        font-size: 0.97em;
+    .wcpcm-credit-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25em;
+    }
+    .wcpcm-credit-sep {
+        display: none;
     }
 }
 
-/* --- Fine Select2 --- */
-
+/* --- Pulsante principale --- */
 .wcpcm-btn {
     width: 100%;
     padding: 0.85em 1em;
@@ -143,6 +121,12 @@
     background: linear-gradient(90deg,#274690 10%,#3971e6 100%);
 }
 
+.wcpcm-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* --- Messaggi --- */
 .wcpcm-note, .wcpcm-error {
     color: #c0392b;
     font-size: 0.97em;
@@ -159,9 +143,10 @@
     font-size: 1em;
 }
 
+/* --- Tabella coupon --- */
 .wcpcm-table-container {
     margin: 2.5em auto;
-    max-width: 800px;
+    max-width: 900px;
 }
 
 .wcpcm-table {
@@ -193,4 +178,49 @@
 
 .wcpcm-table tr:hover td {
     background: #e0ecff;
+}
+
+/* --- Badge stato coupon --- */
+.wcpcm-badge {
+    display: inline-block;
+    padding: 0.2em 0.65em;
+    border-radius: 20px;
+    font-size: 0.88em;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+
+.wcpcm-badge-active {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.wcpcm-badge-used {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+/* --- Pulsante elimina nella tabella --- */
+.wcpcm-btn-delete {
+    padding: 0.35em 0.85em;
+    background: #c0392b;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.92em;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+}
+
+.wcpcm-btn-delete:hover, .wcpcm-btn-delete:focus {
+    background: #96281b;
+}
+
+.wcpcm-btn-delete:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
