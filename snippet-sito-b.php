@@ -54,7 +54,7 @@ function wcp_b_verify_secret(WP_REST_Request $request) {
         return new WP_Error('no_secret', 'Chiave segreta non configurata sul Sito B.', ['status' => 500]);
     }
     $provided = $request->get_header('X-WCP-Secret');
-    if (!hash_equals($secret, (string) $provided)) {
+    if (empty($provided) || !hash_equals($secret, $provided)) {
         return new WP_Error('forbidden', 'Chiave segreta non valida.', ['status' => 403]);
     }
     return true;
@@ -115,13 +115,21 @@ function wcp_b_coupon_status(WP_REST_Request $request) {
         return new WP_Error('missing_code', 'Codice coupon mancante.', ['status' => 400]);
     }
 
-    $post = get_page_by_title($code, OBJECT, 'shop_coupon');
-    if (!$post) {
+    $posts = get_posts([
+        'post_type'      => 'shop_coupon',
+        'post_status'    => 'publish',
+        'title'          => $code,
+        'posts_per_page' => 1,
+        'fields'         => 'ids',
+        'no_found_rows'  => true,
+    ]);
+    if (empty($posts)) {
         return new WP_Error('not_found', 'Coupon non trovato.', ['status' => 404]);
     }
+    $post_id = $posts[0];
 
-    $usage_count = (int) get_post_meta($post->ID, 'usage_count', true);
-    $usage_limit = (int) get_post_meta($post->ID, 'usage_limit', true);
+    $usage_count = (int) get_post_meta($post_id, 'usage_count', true);
+    $usage_limit = (int) get_post_meta($post_id, 'usage_limit', true);
 
     $used = ($usage_count > 0) || ($usage_limit > 0 && $usage_count >= $usage_limit);
 
@@ -142,17 +150,25 @@ function wcp_b_delete_coupon(WP_REST_Request $request) {
         return new WP_Error('missing_code', 'Codice coupon mancante.', ['status' => 400]);
     }
 
-    $post = get_page_by_title($code, OBJECT, 'shop_coupon');
-    if (!$post) {
+    $posts = get_posts([
+        'post_type'      => 'shop_coupon',
+        'post_status'    => 'publish',
+        'title'          => $code,
+        'posts_per_page' => 1,
+        'fields'         => 'ids',
+        'no_found_rows'  => true,
+    ]);
+    if (empty($posts)) {
         return new WP_Error('not_found', 'Coupon non trovato.', ['status' => 404]);
     }
+    $post_id = $posts[0];
 
-    $usage_count = (int) get_post_meta($post->ID, 'usage_count', true);
+    $usage_count = (int) get_post_meta($post_id, 'usage_count', true);
     if ($usage_count > 0) {
         return new WP_Error('already_used', 'Il coupon è già stato utilizzato e non può essere eliminato.', ['status' => 409]);
     }
 
-    $result = wp_delete_post($post->ID, true);
+    $result = wp_delete_post($post_id, true);
     if (!$result) {
         return new WP_Error('delete_failed', 'Errore nell\'eliminazione del coupon.', ['status' => 500]);
     }

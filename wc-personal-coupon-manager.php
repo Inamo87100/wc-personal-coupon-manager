@@ -404,6 +404,10 @@ class WC_Personal_Coupon_Manager {
             return new WP_Error('no_remote_url', 'URL del sito remoto non configurato.');
         }
 
+        if (strpos($base_url, 'https://') !== 0) {
+            return new WP_Error('insecure_url', 'L\'URL del sito remoto deve utilizzare HTTPS.');
+        }
+
         $args = [
             'method'  => strtoupper($method),
             'headers' => [
