@@ -6,18 +6,17 @@
  * (oppure in un plugin must-use).
  *
  * Configurazione:
- *   - Imposta la costante WCP_SECRET_KEY con la stessa chiave
- *     inserita nelle impostazioni del plugin sul Sito A, oppure
- *     modifica wcp_b_get_secret() per leggere un'opzione WordPress.
+ *   - La costante WCP_SECRET_KEY è già impostata con la chiave condivisa.
+ *     Assicurati che corrisponda alla chiave nelle impostazioni del plugin sul Sito A.
  */
 
 if (!defined('ABSPATH')) exit;
 
 // ---------------------------------------------------------------------------
-// Costante chiave segreta (oppure usare un'opzione: get_option('wcp_b_secret'))
+// Costante chiave segreta — deve corrispondere a quella impostata sul Sito A
 // ---------------------------------------------------------------------------
 if (!defined('WCP_SECRET_KEY')) {
-    define('WCP_SECRET_KEY', '');  // <-- inserisci qui la chiave segreta
+    define('WCP_SECRET_KEY', 'wcp_a8f3k9x2z5m7q1p4r6t0y8n3j6v2w5b');
 }
 
 // ---------------------------------------------------------------------------
@@ -83,10 +82,10 @@ function wcp_b_create_coupon(WP_REST_Request $request) {
 
     $code      = strtolower(wp_generate_password(12, false));
     $coupon_id = wp_insert_post([
-        'post_title'  => $code,
+        'post_title'   => $code,
         'post_content' => '',
-        'post_status' => 'publish',
-        'post_type'   => 'shop_coupon',
+        'post_status'  => 'publish',
+        'post_type'    => 'shop_coupon',
     ]);
 
     if (is_wp_error($coupon_id)) {
@@ -170,7 +169,7 @@ function wcp_b_delete_coupon(WP_REST_Request $request) {
 
     $result = wp_delete_post($post_id, true);
     if (!$result) {
-        return new WP_Error('delete_failed', 'Errore nell\'eliminazione del coupon.', ['status' => 500]);
+        return new WP_Error('delete_failed', "Errore nell'eliminazione del coupon.", ['status' => 500]);
     }
 
     return rest_ensure_response(['success' => true]);
