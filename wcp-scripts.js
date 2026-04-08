@@ -9,10 +9,9 @@ jQuery(function ($) {
     $('#wcp-coupon-form').on('submit', function (e) {
         e.preventDefault();
 
-        var $form      = $(this);
-        var amount     = $('#wcp-amount').val();
-        var productId  = $('#wcp-product').val();
-        var email      = $('#wcp-email').val();
+        var $form     = $(this);
+        var productId = $('#wcp-product').val();
+        var email     = $('#wcp-email').val();
 
         // Reset stili
         $form.find('.wcpcm-input').css('border-color', '#d8e2ff');
@@ -25,11 +24,6 @@ jQuery(function ($) {
             valid = false;
             errors.push('Seleziona un prodotto.');
             $('#wcp-product').css('border-color', '#c0392b');
-        }
-        if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
-            valid = false;
-            errors.push("Inserisci un importo sconto valido (maggiore di 0).");
-            $('#wcp-amount').css('border-color', '#c0392b');
         }
         var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!email || !emailRegex.test(email)) {
@@ -54,7 +48,6 @@ jQuery(function ($) {
             data: {
                 action:     'wcp_create_coupon',
                 nonce:      wcp_ajax.nonce,
-                amount:     amount,
                 product_id: productId,
                 email:      email
             },
@@ -90,7 +83,7 @@ jQuery(function ($) {
         var postId = $btn.data('post-id');
         var code   = $btn.data('code');
 
-        if (!confirm('Sei sicuro di voler eliminare il codice "' + code + '"?\nL\'importo verrà restituito al tuo credito.')) {
+        if (!confirm('Sei sicuro di voler eliminare il codice "' + code + '"?\nIl credito verrà ripristinato.')) {
             return;
         }
 

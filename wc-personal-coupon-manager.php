@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Personal Coupon Manager
 Description: Gestione coupon dall'area "Il mio account" con sistema credito e creazione remota su Sito B.
-Version: 3.0
+Version: 3.1
 Author: Inamo87100
 */
 if (!defined('ABSPATH')) exit;
@@ -188,10 +188,6 @@ class WC_Personal_Coupon_Manager {
                     </select>
                 </div>
                 <div class="wcpcm-form-group">
-                    <label class="wcpcm-label" for="wcp-amount">Importo Sconto (&euro;) <span style="color:red">*</span></label>
-                    <input class="wcpcm-input" type="number" name="amount" id="wcp-amount" required min="0.01" step="0.01" placeholder="Es: 10.00">
-                </div>
-                <div class="wcpcm-form-group">
                     <label class="wcpcm-label" for="wcp-email">Email Utente Abilitato <span style="color:red">*</span></label>
                     <input class="wcpcm-input" type="email" name="email" id="wcp-email" required placeholder="Inserisci email abilitata">
                 </div>
@@ -216,23 +212,30 @@ class WC_Personal_Coupon_Manager {
             wp_send_json_error(['msg' => 'Non hai i permessi.']);
         }
         $user_id    = get_current_user_id();
-        $amount     = isset($_POST['amount']) ? round((float) $_POST['amount'], 2) : 0;
         $product_id = isset($_POST['product_id']) ? intval($_POST['product_id']) : 0;
         $email      = isset($_POST['email']) ? sanitize_email($_POST['email']) : '';
 
-        if ($amount <= 0 || !$product_id || !$email || !is_email($email)) {
-            wp_send_json_error(['msg' => "Compila tutti i campi obbligatori e inserisci un'email valida."]); 
+        if (!$product_id || !$email || !is_email($email)) {
+            wp_send_json_error(['msg' => "Compila tutti i campi obbligatori e inserisci un'email valida."]);
+        }
+
+        // Fetch current product price from Sito B (IVA inclusa).
+        $price = $this->get_product_price_from_remote($product_id);
+        if (is_wp_error($price)) {
+            wp_send_json_error(['msg' => 'Impossibile ottenere il prezzo del prodotto dal sito remoto: ' . $price->get_error_message()]);
+        }
+        if ($price <= 0) {
+            wp_send_json_error(['msg' => 'Prezzo del prodotto non valido ricevuto dal sito remoto.']);
         }
 
         $remaining = $this->get_user_remaining_credit($user_id);
-        if ($amount > $remaining) {
-            wp_send_json_error(['msg' => sprintf('Credito insufficiente. Credito disponibile: &euro;%s', number_format($remaining, 2, ',', '.'))]);
+        if ($price > $remaining) {
+            wp_send_json_error(['msg' => sprintf('Credito insufficiente. Credito disponibile: &euro;%s, prezzo prodotto: &euro;%s.', number_format($remaining, 2, ',', '.'), number_format($price, 2, ',', '.'))]);
         }
 
         $product_name = $this->get_product_name_by_id($product_id);
 
         $response = $this->call_remote_api('/wp-json/wcp/v1/create-coupon', 'POST', [
-            'amount'     => $amount,
             'email'      => $email,
             'product_id' => $product_id,
         ]);
@@ -258,7 +261,7 @@ class WC_Personal_Coupon_Manager {
             wp_send_json_error(['msg' => 'Coupon creato sul sito remoto ma errore nel salvataggio locale.']);
         }
 
-        update_post_meta($post_id, 'wcp_amount', $amount);
+        update_post_meta($post_id, 'wcp_amount', $price);
         update_post_meta($post_id, 'wcp_product_id_b', $product_id);
         update_post_meta($post_id, 'wcp_product_name', $product_name);
         update_post_meta($post_id, 'wcp_email', $email);
@@ -343,7 +346,7 @@ class WC_Personal_Coupon_Manager {
 
         echo '<table class="wcpcm-table"><thead><tr>
             <th>Codice</th>
-            <th>Importo (&euro;)</th>
+            <th>Prezzo prodotto (&euro;)</th>
             <th>Prodotto</th>
             <th>Email abilitata</th>
             <th>Creato il</th>
@@ -617,6 +620,17 @@ class WC_Personal_Coupon_Manager {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    private function get_product_price_from_remote($product_id) {
+        $response = $this->call_remote_api('/wp-json/wcp/v1/product-price?product_id=' . intval($product_id), 'GET', []);
+        if (is_wp_error($response)) {
+            return $response;
+        }
+        if (empty($response['success']) || !isset($response['price'])) {
+            return new WP_Error('invalid_price', 'Risposta prezzo non valida dal sito remoto.');
+        }
+        return round((float) $response['price'], 2);
+    }
 
     private function get_credit_product_ids() {
         $raw = get_option('wcp_credit_product_ids', '206657');
