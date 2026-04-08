@@ -17,9 +17,11 @@ class WC_Personal_Coupon_Manager {
         add_action('wp_enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('wp_ajax_wcp_create_coupon', [$this, 'handle_coupon_creation']);
         add_action('wp_ajax_wcp_delete_coupon', [$this, 'handle_coupon_deletion']);
-        add_action('admin_menu', [$this, 'register_settings_page']);
+        add_action('admin_menu', [$this, 'register_admin_menu']);
         add_action('admin_post_wcp_save_settings', [$this, 'save_settings']);
         add_action('admin_post_wcp_generate_secret', [$this, 'generate_secret_key']);
+        add_action('admin_post_wcp_admin_delete_coupon', [$this, 'handle_admin_coupon_deletion']);
+        add_action('admin_notices', [$this, 'admin_notices_wcp']);
     }
 
     // -------------------------------------------------------------------------
@@ -439,18 +441,116 @@ class WC_Personal_Coupon_Manager {
     }
 
     // -------------------------------------------------------------------------
-    // Settings page
+    // Admin menu
     // -------------------------------------------------------------------------
 
-    public function register_settings_page() {
-        add_options_page(
+    public function register_admin_menu() {
+        add_menu_page(
             'WC Coupon Manager',
             'WC Coupon Manager',
+            'manage_options',
+            'wcp-manager',
+            [$this, 'render_coupons_page'],
+            'dashicons-tickets-alt',
+            56
+        );
+        add_submenu_page(
+            'wcp-manager',
+            'Coupon',
+            'Coupon',
+            'manage_options',
+            'wcp-manager',
+            [$this, 'render_coupons_page']
+        );
+        add_submenu_page(
+            'wcp-manager',
+            'Impostazioni',
+            'Impostazioni',
             'manage_options',
             'wcp-settings',
             [$this, 'render_settings_page']
         );
     }
+
+    public function render_coupons_page() {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+        require_once plugin_dir_path(__FILE__) . 'includes/class-wcp-coupons-table.php';
+        $table = new WCP_Coupons_Table($this);
+        $table->prepare_items();
+        ?>
+        <div class="wrap">
+            <h1 class="wp-heading-inline">WC Coupon Manager &mdash; Coupon</h1>
+            <hr class="wp-header-end">
+            <form method="get">
+                <input type="hidden" name="page" value="wcp-manager">
+                <?php $table->search_box('Cerca coupon', 'wcp_coupon_search'); ?>
+                <?php $table->display(); ?>
+            </form>
+        </div>
+        <?php
+    }
+
+    public function handle_admin_coupon_deletion() {
+        if (!current_user_can('manage_options')) {
+            wp_die('Non autorizzato.');
+        }
+        $post_id = isset($_GET['post_id']) ? intval($_GET['post_id']) : 0;
+        if (!$post_id) {
+            wp_die('ID coupon non valido.');
+        }
+        check_admin_referer('wcp_admin_delete_' . $post_id);
+
+        $post = get_post($post_id);
+        if (!$post || $post->post_type !== 'wcp_coupon') {
+            wp_die('Coupon non trovato.');
+        }
+
+        $redirect_url = admin_url('admin.php?page=wcp-manager');
+        $code         = $post->post_title;
+
+        $status = $this->call_remote_api('/wp-json/wcp/v1/coupon-status?code=' . urlencode($code), 'GET', []);
+        if (is_wp_error($status)) {
+            wp_redirect(add_query_arg('wcp_error', rawurlencode('Errore nel verificare lo stato del coupon sul sito remoto.'), $redirect_url));
+            exit;
+        }
+        if (!empty($status['used'])) {
+            wp_redirect(add_query_arg('wcp_error', rawurlencode('Il coupon è già stato utilizzato e non può essere eliminato.'), $redirect_url));
+            exit;
+        }
+
+        $delete_response = $this->call_remote_api('/wp-json/wcp/v1/delete-coupon?code=' . urlencode($code), 'DELETE', []);
+        if (is_wp_error($delete_response) || empty($delete_response['success'])) {
+            $msg = is_wp_error($delete_response) ? $delete_response->get_error_message() : 'Il sito remoto non ha confermato l\'eliminazione del coupon.';
+            wp_redirect(add_query_arg('wcp_error', rawurlencode($msg), $redirect_url));
+            exit;
+        }
+
+        wp_delete_post($post_id, true);
+
+        wp_redirect(add_query_arg('wcp_message', rawurlencode('Coupon eliminato con successo.'), $redirect_url));
+        exit;
+    }
+
+    public function admin_notices_wcp() {
+        $page = isset($_GET['page']) ? sanitize_text_field($_GET['page']) : '';
+        if (!in_array($page, ['wcp-manager', 'wcp-settings'], true)) {
+            return;
+        }
+        if (isset($_GET['wcp_message'])) {
+            $message = sanitize_text_field(urldecode($_GET['wcp_message']));
+            echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($message) . '</p></div>';
+        }
+        if (isset($_GET['wcp_error'])) {
+            $error = sanitize_text_field(urldecode($_GET['wcp_error']));
+            echo '<div class="notice notice-error is-dismissible"><p>' . esc_html($error) . '</p></div>';
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Settings page
+    // -------------------------------------------------------------------------
 
     public function render_settings_page() {
         if (!current_user_can('manage_options')) {
