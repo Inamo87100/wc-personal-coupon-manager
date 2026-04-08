@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Personal Coupon Manager
 Description: Gestione coupon dall'area "Il mio account" con sistema credito e creazione remota su Sito B.
-Version: 3.1
+Version: 3.2
 Author: Inamo87100
 */
 if (!defined('ABSPATH')) exit;
@@ -19,6 +19,7 @@ class WC_Personal_Coupon_Manager {
         add_action('wp_ajax_wcp_delete_coupon', [$this, 'handle_coupon_deletion']);
         add_action('admin_menu', [$this, 'register_settings_page']);
         add_action('admin_post_wcp_save_settings', [$this, 'save_settings']);
+        add_action('admin_post_wcp_generate_secret', [$this, 'generate_secret_key']);
     }
 
     // -------------------------------------------------------------------------
@@ -466,12 +467,19 @@ class WC_Personal_Coupon_Manager {
         }
         $all_roles = wp_roles()->get_names();
 
-        $saved = isset($_GET['saved']) && $_GET['saved'] === '1';
+        $saved     = isset($_GET['saved'])     && $_GET['saved']     === '1';
+        $generated = isset($_GET['generated']) && $_GET['generated'] === '1';
         ?>
         <div class="wrap">
             <h1>WC Coupon Manager &mdash; Impostazioni</h1>
             <?php if ($saved) : ?>
                 <div class="notice notice-success is-dismissible"><p>Impostazioni salvate.</p></div>
+            <?php endif; ?>
+            <?php if ($generated) : ?>
+                <div class="notice notice-success is-dismissible">
+                    <p><strong>Chiave segreta generata e salvata.</strong> Copia la chiave dal campo qui sotto e incollala nello snippet WPCode su Sito B come:<br>
+                    <code>define('WCP_SECRET_KEY', 'LA_TUA_CHIAVE');</code></p>
+                </div>
             <?php endif; ?>
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                 <input type="hidden" name="action" value="wcp_save_settings">
@@ -490,9 +498,15 @@ class WC_Personal_Coupon_Manager {
                     <tr>
                         <th><label for="wcp_secret_key">Chiave segreta</label></th>
                         <td>
-                            <input type="text" id="wcp_secret_key" name="wcp_secret_key"
-                                   value="<?php echo esc_attr($secret_key); ?>"
-                                   class="regular-text" placeholder="chiave condivisa X-WCP-Secret">
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                <input type="password" id="wcp_secret_key" name="wcp_secret_key"
+                                       value="<?php echo esc_attr($secret_key); ?>"
+                                       class="regular-text" placeholder="chiave condivisa X-WCP-Secret"
+                                       autocomplete="new-password">
+                                <button type="button" id="wcp-toggle-secret" class="button"
+                                        onclick="(function(btn){var f=document.getElementById('wcp_secret_key');f.type=f.type==='password'?'text':'password';btn.textContent=f.type==='password'?'Mostra':'Nascondi';})(this)">Mostra</button>
+                            </div>
+                            <p class="description">Chiave condivisa usata nell'header <code>X-WCP-Secret</code>.</p>
                         </td>
                     </tr>
                 </table>
@@ -576,6 +590,15 @@ class WC_Personal_Coupon_Manager {
 
                 <?php submit_button('Salva impostazioni'); ?>
             </form>
+
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top:8px;">
+                <input type="hidden" name="action" value="wcp_generate_secret">
+                <?php wp_nonce_field('wcp_generate_secret_nonce', 'wcp_generate_secret_nonce_field'); ?>
+                <button type="submit" class="button button-secondary"
+                        onclick="return confirm('Generare una nuova chiave segreta? La chiave attuale sarà sovrascritta.');">
+                    🔑 Genera chiave segreta automaticamente
+                </button>
+            </form>
         </div>
         <?php
     }
@@ -614,6 +637,23 @@ class WC_Personal_Coupon_Manager {
         update_option('wcp_allowed_roles', $allowed_roles);
 
         wp_redirect(admin_url('options-general.php?page=wcp-settings&saved=1'));
+        exit;
+    }
+
+    public function generate_secret_key() {
+        if (!current_user_can('manage_options')) {
+            wp_die('Non autorizzato.');
+        }
+        check_admin_referer('wcp_generate_secret_nonce', 'wcp_generate_secret_nonce_field');
+
+        // wp_generate_password(48) produces 48 random characters; base64_encode()
+        // converts them to exactly 64 URL/define-safe characters (A-Z, a-z, 0-9, +, /, =).
+        $raw = wp_generate_password(48, true, false);
+        $secret_key = base64_encode($raw);
+
+        update_option('wcp_secret_key', $secret_key);
+
+        wp_redirect(admin_url('options-general.php?page=wcp-settings&generated=1'));
         exit;
     }
 
