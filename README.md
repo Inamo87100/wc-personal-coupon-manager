@@ -16,7 +16,7 @@ Plugin WordPress per la gestione coupon personalizzati dall'area "Il mio account
 1. Installa e attiva il plugin.
 2. Vai su **Impostazioni → WC Coupon Manager** e configura:
    - **URL Sito B**: URL HTTPS del sito remoto (es. `https://negozio.it`)
-   - **Chiave segreta**: stringa condivisa usata nell'header `X-WCP-Secret`
+   - **Chiave segreta**: usa il pulsante **"🔑 Genera chiave segreta automaticamente"** per generarne una sicura, oppure inseriscila manualmente. Il campo è di tipo password (con toggle mostra/nascondi).
    - **ID prodotti credito**: ID dei prodotti WooCommerce su Sito A il cui acquisto genera credito
    - **Prodotti disponibili (Sito B)**: mappa nome → ID prodotto su Sito B da mostrare nel form
    - **Ruoli autorizzati**: ruoli WordPress che possono accedere alla sezione coupon
@@ -206,17 +206,33 @@ add_action('rest_api_init', function () {
 
 ### Come definire la chiave segreta su Sito B
 
-Aggiungi in `wp-config.php` (opzionale, altrimenti usa l'opzione DB `wcp_secret_key`):
+**Procedura consigliata (opzione A — generazione automatica):**
+
+1. Su **Sito A**, vai in **Impostazioni → WC Coupon Manager**.
+2. Clicca il pulsante **"🔑 Genera chiave segreta automaticamente"** in fondo alla pagina.
+3. Il plugin genera una chiave sicura (48 byte casuali codificati in base64, ~64 caratteri) e la salva automaticamente.
+4. Clicca **"Mostra"** accanto al campo *Chiave segreta* per visualizzarla, poi copiala.
+5. Su **Sito B**, apri lo snippet in **WPCode** e aggiungi (o aggiorna) all'inizio:
 
 ```php
-define('WCP_SECRET_KEY', 'la-tua-chiave-segreta-condivisa');
+if (!defined('WCP_SECRET_KEY')) {
+    define('WCP_SECRET_KEY', 'LA_CHIAVE_COPIATA_DAL_SITO_A');
+}
 ```
 
-La stessa chiave deve essere configurata nelle **Impostazioni → WC Coupon Manager** su Sito A.
+Salva lo snippet su WPCode e la connessione tra i due siti sarà attiva.
+
+> **Nota:** La chiave viene mostrata solo nella pagina impostazioni. Se la perdi, puoi rigenerarla — ricordati di aggiornare anche lo snippet WPCode su Sito B con la nuova chiave.
 
 ---
 
 ## Changelog
+
+### v3.2
+- Aggiunto pulsante **"🔑 Genera chiave segreta automaticamente"** nella pagina impostazioni (azione `admin_post_wcp_generate_secret` con nonce e capability check `manage_options`).
+- La chiave viene generata con `wp_generate_password(48)` e codificata in base64 (~64 caratteri) per evitare caratteri problematici nel copia/incolla.
+- Il campo *Chiave segreta* è ora di tipo `password` con toggle mostra/nascondi per evitare esposizione accidentale.
+- Notice di conferma dopo la generazione con istruzioni per WPCode su Sito B.
 
 ### v3.1
 - Rimosso il campo "Importo sconto" dal form: il coupon è sempre percentuale 100%.
