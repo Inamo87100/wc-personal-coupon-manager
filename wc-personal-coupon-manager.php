@@ -82,8 +82,13 @@ class WC_Personal_Coupon_Manager {
         if (function_exists('is_account_page') && is_account_page()) {
             global $wp;
             if (isset($wp->query_vars['crea-utente'])) {
-                wp_enqueue_style('wcp-style', plugin_dir_url(__FILE__) . 'style.css', [], '3.0');
-                wp_enqueue_script('wcp-ajax', plugin_dir_url(__FILE__) . 'wcp-scripts.js', ['jquery'], '3.0', true);
+                $style_path    = plugin_dir_path(__FILE__) . 'style.css';
+                $script_path   = plugin_dir_path(__FILE__) . 'wcp-scripts.js';
+                $style_version = file_exists($style_path) ? filemtime($style_path) : '3.3';
+                $script_version = file_exists($script_path) ? filemtime($script_path) : '3.3';
+
+                wp_enqueue_style('wcp-style', plugin_dir_url(__FILE__) . 'style.css', [], $style_version);
+                wp_enqueue_script('wcp-ajax', plugin_dir_url(__FILE__) . 'wcp-scripts.js', ['jquery'], $script_version, true);
                 $user_id = get_current_user_id();
                 wp_localize_script('wcp-ajax', 'wcp_ajax', [
                     'ajax_url'         => admin_url('admin-ajax.php'),
@@ -651,7 +656,7 @@ class WC_Personal_Coupon_Manager {
         }
         update_option('wcp_allowed_roles', $allowed_roles);
 
-        wp_redirect(admin_url('options-general.php?page=wcp-settings&saved=1'));
+        wp_redirect(admin_url('admin.php?page=wcp-settings&saved=1'));
         exit;
     }
 
@@ -668,7 +673,7 @@ class WC_Personal_Coupon_Manager {
 
         update_option('wcp_secret_key', $secret_key);
 
-        wp_redirect(admin_url('options-general.php?page=wcp-settings&generated=1'));
+        wp_redirect(admin_url('admin.php?page=wcp-settings&generated=1'));
         exit;
     }
 
