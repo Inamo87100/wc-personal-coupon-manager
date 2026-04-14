@@ -10,7 +10,7 @@ jQuery(function ($) {
         e.preventDefault();
 
         var $form     = $(this);
-        var productId = $('#wcp-product').val();
+        var courseId  = $('#wcp-course').val();
         var email     = $('#wcp-email').val();
         var firstName = $('#wcp-first-name').val();
         var lastName  = $('#wcp-last-name').val();
@@ -22,10 +22,10 @@ jQuery(function ($) {
         var valid = true;
         var errors = [];
 
-        if (!productId) {
+        if (!courseId) {
             valid = false;
             errors.push('Seleziona un corso.');
-            $('#wcp-product').css('border-color', '#c0392b');
+            $('#wcp-course').css('border-color', '#c0392b');
         }
         if (!firstName) {
             valid = false;
@@ -60,7 +60,7 @@ jQuery(function ($) {
             data: {
                 action:     'wcp_create_user',
                 nonce:      wcp_ajax.nonce,
-                product_id: productId,
+                course_id:  courseId,
                 email:      email,
                 first_name: firstName,
                 last_name:  lastName
