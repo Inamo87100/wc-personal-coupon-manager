@@ -240,7 +240,7 @@ class WC_Personal_Coupon_Manager {
             'last_name'  => $last_name,
             'course_ids' => [intval($product_id)],
         ];
-        if ($current_user->exists()) {
+        if ($current_user->exists() && $current_user->user_email !== '') {
             $creator_login = sanitize_user($current_user->user_login, true);
             $creator_email = sanitize_email($current_user->user_email);
             if ($creator_login !== '' && $creator_email !== '') {
