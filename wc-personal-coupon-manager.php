@@ -234,15 +234,11 @@ class WC_Personal_Coupon_Manager {
         $course_name = $this->get_product_name_by_id($product_id);
         $current_user = wp_get_current_user();
         $created_by = '';
-        if ($current_user instanceof WP_User && $current_user->exists()) {
-            $creator_login_raw = (string) $current_user->user_login;
-            $creator_email_raw = (string) $current_user->user_email;
-            if ($creator_login_raw !== '' && $creator_email_raw !== '') {
-                $creator_login = sanitize_text_field($creator_login_raw);
-                $creator_email = sanitize_email($creator_email_raw);
-                if ($creator_login !== '' && $creator_email !== '') {
-                    $created_by = sprintf('%s (%s)', $creator_login, $creator_email);
-                }
+        if ($current_user->exists()) {
+            $creator_login = sanitize_text_field((string) $current_user->user_login);
+            $creator_email = sanitize_email((string) $current_user->user_email);
+            if ($creator_login !== '' && $creator_email !== '') {
+                $created_by = sprintf('%s (%s)', $creator_login, $creator_email);
             }
         }
 
