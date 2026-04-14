@@ -49,6 +49,8 @@ Body JSON:
 }
 ```
 
+`created_by` viene valorizzato come `username (email)` dell'utente loggato su Sito A (se disponibile).
+
 5. In caso di successo salva uno storico locale (`wcp_user_activation`) e scala credito per l'attivazione.
 
 ---
