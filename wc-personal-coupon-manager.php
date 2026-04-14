@@ -462,8 +462,7 @@ class WC_Personal_Coupon_Manager {
             <?php endif; ?>
             <?php if ($generated) : ?>
                 <div class="notice notice-success is-dismissible">
-                     <p><strong>Chiave segreta generata e salvata.</strong> Copia la chiave dal campo qui sotto e usala su Sito B come valore dell'header <code>X-NF-SECRET</code>.<br>
-                     <code>define('WCP_SECRET_KEY', 'LA_TUA_CHIAVE');</code></p>
+                    <p><strong>Chiave segreta generata e salvata.</strong> Copia la chiave dal campo qui sotto e usala su Sito B come valore dell'header <code>X-NF-SECRET</code>.</p>
                 </div>
             <?php endif; ?>
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
