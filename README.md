@@ -44,9 +44,12 @@ Body JSON:
   "user_email": "utente@example.com",
   "first_name": "Mario",
   "last_name": "Rossi",
-  "course_ids": [123]
+  "course_ids": [123],
+  "created_by": "adminA (adminA@sitoa.it)"
 }
 ```
+
+`created_by` viene valorizzato come `username (email)` dell'utente loggato su Sito A (se disponibile).
 
 5. In caso di successo salva uno storico locale (`wcp_user_activation`) e scala credito per l'attivazione.
 

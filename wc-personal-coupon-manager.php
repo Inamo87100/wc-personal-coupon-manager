@@ -232,14 +232,23 @@ class WC_Personal_Coupon_Manager {
         }
 
         $course_name = $this->get_product_name_by_id($product_id);
-
-        $response = $this->call_remote_api('/wp-json/nf/v1/create-user', 'POST', [
+        $current_user = wp_get_current_user();
+        $payload = [
             'action'     => 'create_user',
             'user_email' => $email,
             'first_name' => $first_name,
             'last_name'  => $last_name,
             'course_ids' => [intval($product_id)],
-        ]);
+        ];
+        if ($current_user->exists() && $current_user->user_email !== '') {
+            $creator_login = sanitize_user($current_user->user_login, true);
+            $creator_email = sanitize_email($current_user->user_email);
+            if ($creator_login !== '' && $creator_email !== '') {
+                $payload['created_by'] = sprintf('%s (%s)', $creator_login, $creator_email);
+            }
+        }
+
+        $response = $this->call_remote_api('/wp-json/nf/v1/create-user', 'POST', $payload);
 
         if (is_wp_error($response)) {
             wp_send_json_error(['msg' => 'Errore di connessione al sito remoto: ' . $response->get_error_message()]);
