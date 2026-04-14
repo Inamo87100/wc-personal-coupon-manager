@@ -8,6 +8,8 @@ Author: Inamo87100
 if (!defined('ABSPATH')) exit;
 
 class WC_Personal_Coupon_Manager {
+    private const DEFAULT_ACTIVATION_COST = 1.0;
+    private const VALID_COST_PATTERN = '/^(?:\d+|\d*\.\d+)$/';
 
     public function __construct() {
         add_action('init', [$this, 'add_my_account_endpoint']);
@@ -128,7 +130,7 @@ class WC_Personal_Coupon_Manager {
         $total = 0.0;
         foreach ($posts as $post_id) {
             $cost = (float) get_post_meta($post_id, 'wcp_credit_cost', true);
-            $total += $cost > 0 ? $cost : 1.0;
+            $total += $cost > 0 ? $cost : self::DEFAULT_ACTIVATION_COST;
         }
         return $total;
     }
@@ -217,6 +219,7 @@ class WC_Personal_Coupon_Manager {
         }
         $user_id    = get_current_user_id();
         $course_id  = isset($_POST['course_id']) ? intval($_POST['course_id']) : 0;
+        // Backward compatibility for legacy frontend payloads.
         if ($course_id <= 0 && isset($_POST['product_id'])) {
             $course_id = intval($_POST['product_id']);
         }
@@ -532,11 +535,11 @@ class WC_Personal_Coupon_Manager {
                         foreach ($products_map as $i => $entry) {
                             $name      = isset($entry['name']) ? $entry['name'] : '';
                             $course_id = isset($entry['course_id']) ? $entry['course_id'] : '';
-                            $cost      = isset($entry['cost']) ? number_format((float) $entry['cost'], 2, '.', '') : '1.00';
+                            $cost      = isset($entry['cost']) ? number_format((float) $entry['cost'], 2, '.', '') : number_format(self::DEFAULT_ACTIVATION_COST, 2, '.', '');
                             echo '<div class="wcp-map-row" style="display:flex;gap:8px;margin-bottom:6px;">';
                             echo '<input type="text" name="wcp_products_map[' . $i . '][name]" value="' . esc_attr($name) . '" placeholder="Nome prodotto" style="flex:2;">';
                             echo '<input type="number" name="wcp_products_map[' . $i . '][course_id]" value="' . esc_attr($course_id) . '" placeholder="ID corso su Sito B" min="1" step="1" style="flex:1;">';
-                            echo '<input type="text" name="wcp_products_map[' . $i . '][cost]" value="' . esc_attr($cost) . '" placeholder="Costo EUR (es. 1,50)" style="flex:1;">';
+                            echo '<input type="text" inputmode="decimal" aria-label="Costo attivazione in EUR" name="wcp_products_map[' . $i . '][cost]" value="' . esc_attr($cost) . '" placeholder="Costo EUR (es. 1,50)" style="flex:1;">';
                             echo '<button type="button" class="button wcp-remove-row">Rimuovi</button>';
                             echo '</div>';
                         }
@@ -544,7 +547,7 @@ class WC_Personal_Coupon_Manager {
                         echo '<div class="wcp-map-row" style="display:flex;gap:8px;margin-bottom:6px;">';
                         echo '<input type="text" name="wcp_products_map[0][name]" value="" placeholder="Nome prodotto" style="flex:2;">';
                         echo '<input type="number" name="wcp_products_map[0][course_id]" value="" placeholder="ID corso su Sito B" min="1" step="1" style="flex:1;">';
-                        echo '<input type="text" name="wcp_products_map[0][cost]" value="1.00" placeholder="Costo EUR (es. 1,50)" style="flex:1;">';
+                        echo '<input type="text" inputmode="decimal" aria-label="Costo attivazione in EUR" name="wcp_products_map[0][cost]" value="' . esc_attr(number_format(self::DEFAULT_ACTIVATION_COST, 2, '.', '')) . '" placeholder="Costo EUR (es. 1,50)" style="flex:1;">';
                         echo '<button type="button" class="button wcp-remove-row">Rimuovi</button>';
                         echo '</div>';
                     }
@@ -554,6 +557,7 @@ class WC_Personal_Coupon_Manager {
                 <script>
                 (function(){
                     var container = document.getElementById('wcp-products-map');
+                    var defaultCost = '<?php echo esc_js(number_format(self::DEFAULT_ACTIVATION_COST, 2, '.', '')); ?>';
                     var idx = container.querySelectorAll('.wcp-map-row').length;
                     document.getElementById('wcp-add-row').addEventListener('click', function(){
                         var row = document.createElement('div');
@@ -561,7 +565,7 @@ class WC_Personal_Coupon_Manager {
                         row.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;';
                         row.innerHTML = '<input type="text" name="wcp_products_map['+idx+'][name]" value="" placeholder="Nome prodotto" style="flex:2;">'
                             + '<input type="number" name="wcp_products_map['+idx+'][course_id]" value="" placeholder="ID corso su Sito B" min="1" step="1" style="flex:1;">'
-                            + '<input type="text" name="wcp_products_map['+idx+'][cost]" value="1.00" placeholder="Costo EUR (es. 1,50)" style="flex:1;">'
+                            + '<input type="text" inputmode="decimal" aria-label="Costo attivazione in EUR" name="wcp_products_map['+idx+'][cost]" value="'+defaultCost+'" placeholder="Costo EUR (es. 1,50)" style="flex:1;">'
                             + '<button type="button" class="button wcp-remove-row">Rimuovi</button>';
                         container.appendChild(row);
                         idx++;
@@ -627,8 +631,8 @@ class WC_Personal_Coupon_Manager {
         $products_map = [];
         foreach ($raw_map as $entry) {
             $name      = isset($entry['name']) ? sanitize_text_field($entry['name']) : '';
-            $course_id = isset($entry['course_id']) ? intval($entry['course_id']) : (isset($entry['id']) ? intval($entry['id']) : 0);
-            $cost      = isset($entry['cost']) ? $this->parse_eur_cost($entry['cost']) : 1.0;
+            $course_id = $this->get_course_id_from_map_entry($entry);
+            $cost      = isset($entry['cost']) ? $this->parse_eur_cost($entry['cost']) : self::DEFAULT_ACTIVATION_COST;
 
             if ($name && $course_id && $cost > 0) {
                 $products_map[] = [
@@ -700,13 +704,13 @@ class WC_Personal_Coupon_Manager {
                 continue;
             }
             $name      = isset($entry['name']) ? sanitize_text_field($entry['name']) : '';
-            $course_id = isset($entry['course_id']) ? intval($entry['course_id']) : (isset($entry['id']) ? intval($entry['id']) : 0);
+            $course_id = $this->get_course_id_from_map_entry($entry);
             if (!$name || !$course_id) {
                 continue;
             }
-            $cost = isset($entry['cost']) ? $this->parse_eur_cost($entry['cost']) : 1.0;
+            $cost = isset($entry['cost']) ? $this->parse_eur_cost($entry['cost']) : self::DEFAULT_ACTIVATION_COST;
             if ($cost <= 0) {
-                $cost = 1.0;
+                $cost = self::DEFAULT_ACTIVATION_COST;
             }
             $products_map[] = [
                 'name'      => $name,
@@ -715,6 +719,19 @@ class WC_Personal_Coupon_Manager {
             ];
         }
         return $products_map;
+    }
+
+    private function get_course_id_from_map_entry($entry) {
+        if (!is_array($entry)) {
+            return 0;
+        }
+        if (isset($entry['course_id'])) {
+            return intval($entry['course_id']);
+        }
+        if (isset($entry['id'])) {
+            return intval($entry['id']);
+        }
+        return 0;
     }
 
     private function parse_eur_cost($raw_cost) {
@@ -728,6 +745,7 @@ class WC_Personal_Coupon_Manager {
         $has_dot    = strpos($normalized, '.') !== false;
 
         if ($has_comma && $has_dot) {
+            // Assume the last separator is decimal (supports 1.234,56 and 1,234.56).
             if (strrpos($normalized, ',') > strrpos($normalized, '.')) {
                 $normalized = str_replace('.', '', $normalized);
                 $normalized = str_replace(',', '.', $normalized);
@@ -738,7 +756,7 @@ class WC_Personal_Coupon_Manager {
             $normalized = str_replace(',', '.', $normalized);
         }
 
-        if (!preg_match('/^\d+(?:\.\d+)?$/', $normalized)) {
+        if (!preg_match(self::VALID_COST_PATTERN, $normalized)) {
             return 0.0;
         }
 
