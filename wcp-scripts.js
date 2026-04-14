@@ -6,7 +6,7 @@ jQuery(function ($) {
     }
 
     // Submit form creazione utente
-    $('#wcp-create-user-form').on('submit', function (e) {
+    $(document).on('submit', '#wcp-create-user-form', function (e) {
         e.preventDefault();
 
         var $form     = $(this);
@@ -47,6 +47,11 @@ jQuery(function ($) {
         if (!valid) {
             var errHtml = errors.map(function (m) { return '<div>' + m + '</div>'; }).join('');
             $('#wcp-form-msg').html('<div class="wcpcm-error">' + errHtml + '</div>').show();
+            return false;
+        }
+
+        if (!window.wcp_ajax || !wcp_ajax.ajax_url || !wcp_ajax.nonce) {
+            $('#wcp-form-msg').html('<div class="wcpcm-error">Errore di configurazione: ricarica la pagina e riprova.</div>').show();
             return false;
         }
 

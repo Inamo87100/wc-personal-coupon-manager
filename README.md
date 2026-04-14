@@ -55,6 +55,12 @@ Body JSON:
 
 ---
 
+## Nota cache dopo aggiornamento plugin
+
+Se dopo un aggiornamento non vedi i comportamenti JS più recenti (es. submit form My Account), svuota la cache di browser/CDN/plugin cache e ricarica la pagina.
+
+---
+
 ## Changelog
 
 ### v3.3
