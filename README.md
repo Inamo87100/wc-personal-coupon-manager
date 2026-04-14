@@ -18,7 +18,7 @@ Plugin WordPress per la gestione attivazioni utente da **Il mio account** con si
    - **URL Sito B**: URL HTTPS del sito remoto (es. `https://formazione.it`)
    - **Chiave segreta**: usata nell'header `X-NF-SECRET`
    - **ID prodotti credito**: ID prodotti WooCommerce su Sito A che generano credito
-   - **Corsi disponibili (Sito B)**: mappa nome → ID corso su Sito B da mostrare nel form
+   - **Corsi disponibili (Sito B)**: mappa nome → ID corso su Sito B + costo attivazione (EUR)
    - **Ruoli autorizzati**: ruoli WordPress che possono accedere alla sezione
 
 ---
