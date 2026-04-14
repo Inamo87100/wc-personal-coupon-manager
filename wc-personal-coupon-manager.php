@@ -226,9 +226,14 @@ class WC_Personal_Coupon_Manager {
         }
 
         $remaining = $this->get_user_remaining_credit($user_id);
-        $activation_cost = $this->get_activation_cost_by_course_id($product_id);
-        if ($activation_cost === null || $activation_cost <= 0) {
-            wp_send_json_error(['msg' => 'Corso non valido o costo di attivazione non configurato.']);
+        $course_entry = $this->get_course_entry_by_course_id($product_id);
+        if ($course_entry === null) {
+            wp_send_json_error(['msg' => sprintf('Corso con ID %d non trovato nella mappatura configurata.', (int) $product_id)]);
+        }
+
+        $activation_cost = (float) $course_entry['cost'];
+        if ($activation_cost <= 0) {
+            wp_send_json_error(['msg' => sprintf('Costo di attivazione non valido (&euro;%s) per il corso %s.', number_format($activation_cost, 2, ',', '.'), sanitize_text_field($course_entry['name']))]);
         }
         if ($activation_cost > $remaining) {
             wp_send_json_error(['msg' => sprintf('Credito insufficiente. Credito disponibile: &euro;%s, credito richiesto per attivazione: &euro;%s.', number_format($remaining, 2, ',', '.'), number_format($activation_cost, 2, ',', '.'))]);
@@ -531,7 +536,7 @@ class WC_Personal_Coupon_Manager {
                             echo '<div class="wcp-map-row" style="display:flex;gap:8px;margin-bottom:6px;">';
                             echo '<input type="text" name="wcp_products_map[' . $i . '][name]" value="' . esc_attr($name) . '" placeholder="Nome prodotto" style="flex:2;">';
                             echo '<input type="number" name="wcp_products_map[' . $i . '][course_id]" value="' . esc_attr($course_id) . '" placeholder="ID corso su Sito B" style="flex:1;">';
-                            echo '<input type="number" step="0.01" min="0" name="wcp_products_map[' . $i . '][cost]" value="' . esc_attr(number_format((float) $cost, 2, '.', '')) . '" placeholder="Costo attivazione" style="flex:1;">';
+                            echo '<input type="number" step="0.01" min="0" name="wcp_products_map[' . $i . '][cost]" value="' . esc_attr((string) round((float) $cost, 2)) . '" placeholder="Costo attivazione" style="flex:1;">';
                             echo '<button type="button" class="button wcp-remove-row">Rimuovi</button>';
                             echo '</div>';
                         }
@@ -622,14 +627,8 @@ class WC_Personal_Coupon_Manager {
         $products_map = [];
         foreach ($raw_map as $entry) {
             $name      = isset($entry['name']) ? sanitize_text_field($entry['name']) : '';
-            $course_id = isset($entry['course_id']) ? intval($entry['course_id']) : (isset($entry['id']) ? intval($entry['id']) : 0);
-
-            $raw_cost = isset($entry['cost']) ? $entry['cost'] : 1.0;
-            if (function_exists('wc_format_decimal')) {
-                $cost = (float) wc_format_decimal($raw_cost, 2);
-            } else {
-                $cost = round((float) $raw_cost, 2);
-            }
+            $course_id = $this->extract_course_id_from_map_entry($entry);
+            $cost      = $this->sanitize_cost_value(isset($entry['cost']) ? $entry['cost'] : 1.0);
 
             if ($name && $course_id) {
                 $products_map[] = [
@@ -695,16 +694,10 @@ class WC_Personal_Coupon_Manager {
             }
 
             $name = isset($entry['name']) ? sanitize_text_field($entry['name']) : '';
-            $course_id = isset($entry['course_id']) ? intval($entry['course_id']) : (isset($entry['id']) ? intval($entry['id']) : 0);
+            $course_id = $this->extract_course_id_from_map_entry($entry);
 
             $has_cost = array_key_exists('cost', $entry);
-            $raw_cost = $has_cost ? $entry['cost'] : 1.0;
-
-            if (function_exists('wc_format_decimal')) {
-                $cost = (float) wc_format_decimal($raw_cost, 2);
-            } else {
-                $cost = round((float) $raw_cost, 2);
-            }
+            $cost = $this->sanitize_cost_value($has_cost ? $entry['cost'] : 1.0);
 
             if (!$has_cost || isset($entry['id'])) {
                 $needs_update = true;
@@ -728,13 +721,33 @@ class WC_Personal_Coupon_Manager {
         return $normalized;
     }
 
-    private function get_activation_cost_by_course_id($course_id) {
+    private function get_course_entry_by_course_id($course_id) {
         foreach ($this->get_products_map() as $entry) {
             if ((int) $entry['course_id'] === (int) $course_id) {
-                return (float) $entry['cost'];
+                return $entry;
             }
         }
         return null;
+    }
+
+    private function extract_course_id_from_map_entry($entry) {
+        if (!is_array($entry)) {
+            return 0;
+        }
+        if (isset($entry['course_id'])) {
+            return intval($entry['course_id']);
+        }
+        if (isset($entry['id'])) {
+            return intval($entry['id']);
+        }
+        return 0;
+    }
+
+    private function sanitize_cost_value($raw_cost) {
+        if (function_exists('wc_format_decimal')) {
+            return (float) wc_format_decimal($raw_cost, 2);
+        }
+        return round((float) $raw_cost, 2);
     }
 
     private function get_product_name_by_id($product_id) {
