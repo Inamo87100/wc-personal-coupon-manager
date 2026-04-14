@@ -8,7 +8,7 @@ if (!class_exists('WP_List_Table')) {
 /**
  * WCP_Coupons_Table
  *
- * Extends WP_List_Table to display and manage wcp_coupon CPT posts
+ * Extends WP_List_Table to display wcp_user_activation CPT posts
  * in the dedicated admin menu page.
  */
 class WCP_Coupons_Table extends WP_List_Table {
@@ -18,26 +18,21 @@ class WCP_Coupons_Table extends WP_List_Table {
 
     public function __construct($plugin_instance) {
         parent::__construct([
-            'singular' => 'coupon',
-            'plural'   => 'coupon',
+            'singular' => 'attivazione',
+            'plural'   => 'attivazioni',
             'ajax'     => false,
         ]);
         $this->plugin = $plugin_instance;
     }
 
-    // -------------------------------------------------------------------------
-    // Column definitions
-    // -------------------------------------------------------------------------
-
     public function get_columns() {
         return [
-            'post_title'   => 'Codice',
-            'author'       => 'Creato da',
-            'product_name' => 'Prodotto',
-            'email'        => 'Email',
-            'amount'       => 'Prezzo (&euro;)',
-            'status'       => 'Stato',
-            'post_date'    => 'Data creazione',
+            'post_title'  => 'Riferimento',
+            'email'       => 'Email',
+            'full_name'   => 'Nome completo',
+            'course_name' => 'Corso',
+            'amount'      => 'Credito scalato (&euro;)',
+            'post_date'   => 'Data attivazione',
         ];
     }
 
@@ -52,37 +47,10 @@ class WCP_Coupons_Table extends WP_List_Table {
         return [];
     }
 
-    // -------------------------------------------------------------------------
-    // Extra tablenav: status filter
-    // -------------------------------------------------------------------------
-
-    protected function extra_tablenav($which) {
-        if ($which !== 'top') {
-            return;
-        }
-        $status_filter = isset($_GET['wcp_status']) ? sanitize_text_field($_GET['wcp_status']) : '';
-        ?>
-        <div class="alignleft actions">
-            <label for="wcp-status-filter" class="screen-reader-text">Filtra per stato</label>
-            <select name="wcp_status" id="wcp-status-filter">
-                <option value="" <?php selected($status_filter, ''); ?>>Tutti gli stati</option>
-                <option value="active" <?php selected($status_filter, 'active'); ?>>Attivi</option>
-                <option value="used" <?php selected($status_filter, 'used'); ?>>Usati</option>
-            </select>
-            <?php submit_button('Filtra', 'secondary', 'filter_action', false); ?>
-        </div>
-        <?php
-    }
-
-    // -------------------------------------------------------------------------
-    // Data preparation
-    // -------------------------------------------------------------------------
-
     public function prepare_items() {
         $per_page      = 20;
         $current_page  = $this->get_pagenum();
         $search        = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
-        $status_filter = isset($_GET['wcp_status']) ? sanitize_text_field($_GET['wcp_status']) : '';
         $orderby_raw   = isset($_GET['orderby']) ? sanitize_text_field($_GET['orderby']) : 'post_date';
         $order_raw     = isset($_GET['order']) ? strtoupper(sanitize_text_field($_GET['order'])) : 'DESC';
 
@@ -90,30 +58,21 @@ class WCP_Coupons_Table extends WP_List_Table {
         $order   = in_array($order_raw, ['ASC', 'DESC'], true) ? $order_raw : 'DESC';
 
         $all_posts = get_posts([
-            'post_type'      => 'wcp_coupon',
+            'post_type'      => 'wcp_user_activation',
             'post_status'    => 'publish',
             'posts_per_page' => -1,
             'orderby'        => $orderby,
             'order'          => $order,
         ]);
 
-        // Filter by search term: coupon code (post_title) or email meta
         if ($search !== '') {
             $all_posts = array_values(array_filter($all_posts, function ($post) use ($search) {
                 if (stripos($post->post_title, $search) !== false) {
                     return true;
                 }
                 $email = (string) get_post_meta($post->ID, 'wcp_email', true);
-                return stripos($email, $search) !== false;
-            }));
-        }
-
-        // Filter by status (uses cached wcp_used meta — value may be out of sync
-        // until the admin visits individual coupons, but avoids N remote API calls)
-        if ($status_filter === 'active' || $status_filter === 'used') {
-            $all_posts = array_values(array_filter($all_posts, function ($post) use ($status_filter) {
-                $is_used = (bool) get_post_meta($post->ID, 'wcp_used', true);
-                return $status_filter === 'used' ? $is_used : !$is_used;
+                $full_name = trim((string) get_post_meta($post->ID, 'wcp_first_name', true) . ' ' . (string) get_post_meta($post->ID, 'wcp_last_name', true));
+                return stripos($email, $search) !== false || stripos($full_name, $search) !== false;
             }));
         }
 
@@ -135,34 +94,24 @@ class WCP_Coupons_Table extends WP_List_Table {
         ];
     }
 
-    // -------------------------------------------------------------------------
-    // Column renderers
-    // -------------------------------------------------------------------------
-
     public function column_default($item, $column_name) {
         switch ($column_name) {
-            case 'author':
-                $user = get_userdata((int) $item->post_author);
-                if ($user) {
-                    return esc_html($user->display_name) . ' <small>(' . esc_html($user->user_login) . ')</small>';
-                }
-                return '&mdash;';
-
-            case 'product_name':
-                return esc_html((string) get_post_meta($item->ID, 'wcp_product_name', true));
-
             case 'email':
                 return esc_html((string) get_post_meta($item->ID, 'wcp_email', true));
 
-            case 'amount':
-                $amount = (float) get_post_meta($item->ID, 'wcp_amount', true);
-                return '&euro;' . number_format($amount, 2, ',', '.');
+            case 'full_name':
+                $full_name = trim((string) get_post_meta($item->ID, 'wcp_first_name', true) . ' ' . (string) get_post_meta($item->ID, 'wcp_last_name', true));
+                return $full_name !== '' ? esc_html($full_name) : '&mdash;';
 
-            case 'status':
-                $is_used = (bool) get_post_meta($item->ID, 'wcp_used', true);
-                return $is_used
-                    ? '<span style="color:#d63638;font-weight:600;">&#10006; Usato</span>'
-                    : '<span style="color:#00a32a;font-weight:600;">&#10004; Attivo</span>';
+            case 'course_name':
+                return esc_html((string) get_post_meta($item->ID, 'wcp_course_name', true));
+
+            case 'amount':
+                $amount = (float) get_post_meta($item->ID, 'wcp_credit_cost', true);
+                if ($amount <= 0) {
+                    $amount = 1.0;
+                }
+                return '&euro;' . number_format($amount, 2, ',', '.');
 
             case 'post_date':
                 return esc_html(date_i18n('d/m/Y H:i', strtotime($item->post_date)));
@@ -172,32 +121,11 @@ class WCP_Coupons_Table extends WP_List_Table {
         }
     }
 
-    /**
-     * Primary column: coupon code with row actions.
-     * Delete action is shown only for non-used coupons.
-     */
     public function column_post_title($item) {
-        $is_used    = (bool) get_post_meta($item->ID, 'wcp_used', true);
-        $delete_url = wp_nonce_url(
-            admin_url('admin-post.php?action=wcp_admin_delete_coupon&post_id=' . $item->ID),
-            'wcp_admin_delete_' . $item->ID
-        );
-
-        $actions = [];
-        if (!$is_used) {
-            $actions['delete'] = sprintf(
-                '<a href="%s" class="submitdelete" onclick="return confirm(\'Eliminare il coupon %s? Questa azione è irreversibile.\');">Elimina</a>',
-                esc_url($delete_url),
-                esc_js($item->post_title)
-            );
-        } else {
-            $actions['status'] = '<span style="color:#aaa;" title="Il coupon è già stato utilizzato e non può essere eliminato.">Elimina (non disponibile)</span>';
-        }
-
-        return '<code>' . esc_html($item->post_title) . '</code>' . $this->row_actions($actions);
+        return '<code>' . esc_html($item->post_title) . '</code>';
     }
 
     public function no_items() {
-        echo 'Nessun coupon trovato.';
+        echo 'Nessuna attivazione trovata.';
     }
 }
