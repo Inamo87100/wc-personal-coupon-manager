@@ -108,9 +108,6 @@ class WCP_Coupons_Table extends WP_List_Table {
 
             case 'amount':
                 $amount = (float) get_post_meta($item->ID, 'wcp_credit_cost', true);
-                if ($amount <= 0) {
-                    $amount = 1.0;
-                }
                 return '&euro;' . number_format($amount, 2, ',', '.');
 
             case 'post_date':
