@@ -44,7 +44,8 @@ Body JSON:
   "user_email": "utente@example.com",
   "first_name": "Mario",
   "last_name": "Rossi",
-  "course_ids": [123]
+  "course_ids": [123],
+  "created_by": "adminA (adminA@sitoa.it)"
 }
 ```
 

@@ -232,6 +232,15 @@ class WC_Personal_Coupon_Manager {
         }
 
         $course_name = $this->get_product_name_by_id($product_id);
+        $current_user = wp_get_current_user();
+        $created_by = '';
+        if ($current_user instanceof WP_User && $current_user->exists()) {
+            $creator_login = isset($current_user->user_login) ? sanitize_text_field($current_user->user_login) : '';
+            $creator_email = isset($current_user->user_email) ? sanitize_email($current_user->user_email) : '';
+            if ($creator_login !== '' && $creator_email !== '') {
+                $created_by = sprintf('%s (%s)', $creator_login, $creator_email);
+            }
+        }
 
         $response = $this->call_remote_api('/wp-json/nf/v1/create-user', 'POST', [
             'action'     => 'create_user',
@@ -239,6 +248,7 @@ class WC_Personal_Coupon_Manager {
             'first_name' => $first_name,
             'last_name'  => $last_name,
             'course_ids' => [intval($product_id)],
+            'created_by' => $created_by,
         ]);
 
         if (is_wp_error($response)) {
