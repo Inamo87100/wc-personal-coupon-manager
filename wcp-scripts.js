@@ -112,7 +112,6 @@ jQuery(function ($) {
                     $btn.closest('tr').fadeOut(400, function () { $(this).remove(); });
                     if (response.data && response.data.remaining_credit !== undefined) {
                         updateRemainingCredit(response.data.remaining_credit);
-                        $('#wcp-credit-remaining').text('\u20ac' + response.data.remaining_credit);
                     }
                 } else {
                     alert('Errore: ' + (response.data ? response.data.msg : 'Errore sconosciuto'));

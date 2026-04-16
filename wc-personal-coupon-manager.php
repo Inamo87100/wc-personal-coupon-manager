@@ -233,8 +233,8 @@ class WC_Personal_Coupon_Manager {
                 if (!is_array($consumed)) {
                     $consumed = ['consumed_users' => 0, 'consumed_credit' => 0.0];
                 }
-                $consumed['consumed_users']  = (int) ($consumed['consumed_users'] ?? 0) + 1;
-                $consumed['consumed_credit'] = (float) ($consumed['consumed_credit'] ?? 0.0) + $lot['cost_per_user'];
+                $consumed['consumed_users']  = (int) $consumed['consumed_users'] + 1;
+                $consumed['consumed_credit'] = (float) $consumed['consumed_credit'] + $lot['cost_per_user'];
                 update_user_meta($user_id, 'wcp_lot_' . $item_id, $consumed);
                 return $lot;
             }
@@ -248,8 +248,8 @@ class WC_Personal_Coupon_Manager {
         if (!is_array($consumed)) {
             return;
         }
-        $consumed['consumed_users']  = max(0, (int) ($consumed['consumed_users'] ?? 0) - 1);
-        $consumed['consumed_credit'] = max(0.0, (float) ($consumed['consumed_credit'] ?? 0.0) - (float) $cost_per_user);
+        $consumed['consumed_users']  = max(0, (int) $consumed['consumed_users'] - 1);
+        $consumed['consumed_credit'] = max(0.0, (float) $consumed['consumed_credit'] - (float) $cost_per_user);
         update_user_meta($user_id, $key, $consumed);
     }
 
@@ -894,9 +894,10 @@ class WC_Personal_Coupon_Manager {
             }
 
             if (abs($cg - ($ua * $cpu)) > self::CREDIT_VALIDATION_TOLERANCE) {
+                $expected = $ua * $cpu;
                 $error_msg = urlencode(sprintf(
                     'Errore validazione prodotto ID %d: credito generato (%.2f) deve essere uguale a utenti (%d) × costo per utente (%.2f) = %.2f.',
-                    $pid, $cg, $ua, $cpu, $ua * $cpu
+                    $pid, $cg, $ua, $cpu, $expected
                 ));
                 wp_redirect(admin_url('admin.php?page=wcp-settings&wcp_error=' . $error_msg));
                 exit;

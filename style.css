@@ -202,6 +202,17 @@
     border: 1px solid #f5c6cb;
 }
 
+/* --- Pulsante annulla/pericolo nella tabella (My Account) --- */
+.wcpcm-btn.wcpcm-btn-danger {
+    background: linear-gradient(90deg,#c0392b 60%,#96281b 100%);
+    width: auto;
+}
+
+.wcpcm-btn.wcpcm-btn-danger:hover,
+.wcpcm-btn.wcpcm-btn-danger:focus {
+    background: linear-gradient(90deg,#96281b 10%,#c0392b 100%);
+}
+
 /* --- Pulsante elimina nella tabella --- */
 .wcpcm-btn-delete {
     padding: 0.35em 0.85em;
