@@ -2,26 +2,28 @@
 /*
 Plugin Name: WooCommerce Personal Coupon Manager
 Description: Gestione attivazioni utente dall'area "Il mio account" con sistema credito e integrazione remota su Sito B.
-Version: 3.3
+Version: 4.0
 Author: Inamo87100
 */
 if (!defined('ABSPATH')) exit;
 
 class WC_Personal_Coupon_Manager {
-    private const DEFAULT_ACTIVATION_COST = 1.0;
-    private const VALID_COST_PATTERN = '/^(?:\d+|\d*\.\d+)$/';
+    private const VALID_COST_PATTERN          = '/^(?:\d+|\d*\.\d+)$/';
+    private const CREDIT_VALIDATION_TOLERANCE = 0.001;
 
     public function __construct() {
         add_action('init', [$this, 'add_my_account_endpoint']);
         add_action('init', [$this, 'register_cpt']);
         add_filter('woocommerce_account_menu_items', [$this, 'add_menu_item']);
-        add_action('woocommerce_account_crea-utente_endpoint', [$this, 'endpoint_content']);
+        add_action('woocommerce_account_registrazione-corsista_endpoint', [$this, 'endpoint_content']);
         add_action('wp_enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('wp_ajax_wcp_create_user', [$this, 'handle_user_creation']);
+        add_action('wp_ajax_wcp_unenroll_user', [$this, 'handle_unenroll']);
         add_action('admin_menu', [$this, 'register_admin_menu']);
         add_action('admin_post_wcp_save_settings', [$this, 'save_settings']);
         add_action('admin_post_wcp_generate_secret', [$this, 'generate_secret_key']);
         add_action('admin_notices', [$this, 'admin_notices_wcp']);
+        add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
     }
 
     // -------------------------------------------------------------------------
@@ -41,13 +43,13 @@ class WC_Personal_Coupon_Manager {
     // -------------------------------------------------------------------------
 
     public function add_my_account_endpoint() {
-        add_rewrite_endpoint('crea-utente', EP_PAGES);
+        add_rewrite_endpoint('registrazione-corsista', EP_PAGES);
     }
 
     public function add_menu_item($items) {
         if ($this->can_access()) {
             $items = array_slice($items, 0, 1, true)
-                   + ['crea-utente' => 'Crea utente']
+                   + ['registrazione-corsista' => 'Registrazione corsista']
                    + array_slice($items, 1, null, true);
         }
         return $items;
@@ -81,11 +83,11 @@ class WC_Personal_Coupon_Manager {
     public function enqueue_assets() {
         if (function_exists('is_account_page') && is_account_page()) {
             global $wp;
-            if (isset($wp->query_vars['crea-utente'])) {
-                $style_path    = plugin_dir_path(__FILE__) . 'style.css';
-                $script_path   = plugin_dir_path(__FILE__) . 'wcp-scripts.js';
-                $style_version = file_exists($style_path) ? filemtime($style_path) : '3.3';
-                $script_version = file_exists($script_path) ? filemtime($script_path) : '3.3';
+            if (isset($wp->query_vars['registrazione-corsista'])) {
+                $style_path     = plugin_dir_path(__FILE__) . 'style.css';
+                $script_path    = plugin_dir_path(__FILE__) . 'wcp-scripts.js';
+                $style_version  = file_exists($style_path)  ? filemtime($style_path)  : '4.0';
+                $script_version = file_exists($script_path) ? filemtime($script_path) : '4.0';
 
                 wp_enqueue_style('wcp-style', plugin_dir_url(__FILE__) . 'style.css', [], $style_version);
                 wp_enqueue_script('wcp-ajax', plugin_dir_url(__FILE__) . 'wcp-scripts.js', ['jquery'], $script_version, true);
@@ -93,57 +95,162 @@ class WC_Personal_Coupon_Manager {
                 wp_localize_script('wcp-ajax', 'wcp_ajax', [
                     'ajax_url'         => admin_url('admin-ajax.php'),
                     'nonce'            => wp_create_nonce('wcp_nonce'),
+                    'unenroll_nonce'   => wp_create_nonce('wcp_nonce'),
                     'remaining_credit' => $this->get_user_remaining_credit($user_id),
                 ]);
             }
         }
     }
 
+    public function enqueue_admin_assets($hook) {
+        if (strpos($hook, 'wcp-manager') === false) {
+            return;
+        }
+        $script_path    = plugin_dir_path(__FILE__) . 'wcp-scripts.js';
+        $script_version = file_exists($script_path) ? filemtime($script_path) : '4.0';
+        wp_enqueue_script('wcp-ajax-admin', plugin_dir_url(__FILE__) . 'wcp-scripts.js', ['jquery'], $script_version, true);
+        wp_localize_script('wcp-ajax-admin', 'wcp_ajax', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce'    => wp_create_nonce('wcp_nonce'),
+        ]);
+    }
+
     // -------------------------------------------------------------------------
-    // Credit system
+    // Credit system – FIFO lots
     // -------------------------------------------------------------------------
 
-    public function get_user_credit_total($user_id) {
-        $credit_product_ids = $this->get_credit_product_ids();
-        if (empty($credit_product_ids)) {
-            return 0.0;
+    private function get_credit_products_map() {
+        $map = get_option('wcp_credit_products_map', []);
+        if (!is_array($map)) {
+            return [];
         }
-        $total = 0.0;
+        $result = [];
+        foreach ($map as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $product_id       = isset($entry['product_id'])       ? intval($entry['product_id'])       : 0;
+            $credit_generated = isset($entry['credit_generated']) ? (float) $entry['credit_generated'] : 0.0;
+            $users_allowed    = isset($entry['users_allowed'])    ? intval($entry['users_allowed'])    : 0;
+            $cost_per_user    = isset($entry['cost_per_user'])    ? (float) $entry['cost_per_user']    : 0.0;
+            if ($product_id > 0 && $credit_generated > 0 && $users_allowed > 0 && $cost_per_user > 0) {
+                $result[] = [
+                    'product_id'       => $product_id,
+                    'credit_generated' => $credit_generated,
+                    'users_allowed'    => $users_allowed,
+                    'cost_per_user'    => $cost_per_user,
+                ];
+            }
+        }
+        return $result;
+    }
+
+    private function get_credit_lots($user_id) {
+        $credit_map = $this->get_credit_products_map();
+        if (empty($credit_map)) {
+            return [];
+        }
+
+        $credit_map_by_id = [];
+        foreach ($credit_map as $entry) {
+            $credit_map_by_id[$entry['product_id']] = $entry;
+        }
+
         $orders = wc_get_orders([
             'customer_id' => $user_id,
             'status'      => 'completed',
             'limit'       => -1,
         ]);
+
+        $lots = [];
         foreach ($orders as $order) {
-            foreach ($order->get_items() as $item) {
-                if (in_array($item->get_product_id(), $credit_product_ids)) {
-                    $total += (float) $item->get_total() + (float) $item->get_total_tax();
+            foreach ($order->get_items() as $item_id => $item) {
+                $pid = $item->get_product_id();
+                if (!isset($credit_map_by_id[$pid])) {
+                    continue;
                 }
+                $map_entry     = $credit_map_by_id[$pid];
+                $qty           = max(1, (int) $item->get_quantity());
+                $credit_total  = $map_entry['credit_generated'] * $qty;
+                $users_total   = $map_entry['users_allowed'] * $qty;
+                $cost_per_user = $map_entry['cost_per_user'];
+
+                $consumed = get_user_meta($user_id, 'wcp_lot_' . $item_id, true);
+                if (!is_array($consumed)) {
+                    $consumed = ['consumed_users' => 0, 'consumed_credit' => 0.0];
+                }
+                $consumed_users  = isset($consumed['consumed_users'])  ? max(0, (int) $consumed['consumed_users'])    : 0;
+                $consumed_credit = isset($consumed['consumed_credit']) ? max(0.0, (float) $consumed['consumed_credit']) : 0.0;
+
+                $lots[] = [
+                    'order_id'         => $order->get_id(),
+                    'order_item_id'    => $item_id,
+                    'product_id'       => $pid,
+                    'date'             => $order->get_date_created() ? $order->get_date_created()->getTimestamp() : 0,
+                    'credit_total'     => $credit_total,
+                    'users_total'      => $users_total,
+                    'cost_per_user'    => $cost_per_user,
+                    'consumed_users'   => $consumed_users,
+                    'consumed_credit'  => $consumed_credit,
+                    'remaining_users'  => max(0, $users_total - $consumed_users),
+                    'remaining_credit' => max(0.0, $credit_total - $consumed_credit),
+                ];
             }
         }
-        return $total;
+
+        // Sort by date ASC (FIFO)
+        usort($lots, function ($a, $b) {
+            return $a['date'] <=> $b['date'];
+        });
+
+        return $lots;
     }
 
-    public function get_user_activations_total($user_id) {
-        $posts = get_posts([
-            'post_type'      => 'wcp_user_activation',
-            'post_status'    => 'publish',
-            'author'         => $user_id,
-            'posts_per_page' => -1,
-            'fields'         => 'ids',
-        ]);
+    public function get_user_credit_total($user_id) {
+        $lots  = $this->get_credit_lots($user_id);
         $total = 0.0;
-        foreach ($posts as $post_id) {
-            $cost = (float) get_post_meta($post_id, 'wcp_credit_cost', true);
-            $total += $cost > 0 ? $cost : self::DEFAULT_ACTIVATION_COST;
+        foreach ($lots as $lot) {
+            $total += $lot['credit_total'];
         }
         return $total;
     }
 
     public function get_user_remaining_credit($user_id) {
-        $total  = $this->get_user_credit_total($user_id);
-        $active = $this->get_user_activations_total($user_id);
-        return max(0.0, $total - $active);
+        $lots      = $this->get_credit_lots($user_id);
+        $remaining = 0.0;
+        foreach ($lots as $lot) {
+            $remaining += $lot['remaining_credit'];
+        }
+        return $remaining;
+    }
+
+    private function consume_first_available_lot($user_id) {
+        $lots = $this->get_credit_lots($user_id);
+        foreach ($lots as $lot) {
+            if ($lot['remaining_users'] > 0 && $lot['remaining_credit'] >= $lot['cost_per_user']) {
+                $item_id  = $lot['order_item_id'];
+                $consumed = get_user_meta($user_id, 'wcp_lot_' . $item_id, true);
+                if (!is_array($consumed)) {
+                    $consumed = ['consumed_users' => 0, 'consumed_credit' => 0.0];
+                }
+                $consumed['consumed_users']  = (int) $consumed['consumed_users'] + 1;
+                $consumed['consumed_credit'] = (float) $consumed['consumed_credit'] + $lot['cost_per_user'];
+                update_user_meta($user_id, 'wcp_lot_' . $item_id, $consumed);
+                return $lot;
+            }
+        }
+        return null;
+    }
+
+    private function rollback_lot_consumption($user_id, $order_item_id, $cost_per_user) {
+        $key      = 'wcp_lot_' . $order_item_id;
+        $consumed = get_user_meta($user_id, $key, true);
+        if (!is_array($consumed)) {
+            return;
+        }
+        $consumed['consumed_users']  = max(0, (int) $consumed['consumed_users'] - 1);
+        $consumed['consumed_credit'] = max(0.0, (float) $consumed['consumed_credit'] - (float) $cost_per_user);
+        update_user_meta($user_id, $key, $consumed);
     }
 
     // -------------------------------------------------------------------------
@@ -177,7 +284,7 @@ class WC_Personal_Coupon_Manager {
                 <span class="wcpcm-credit-label">Credito disponibile:</span>
                 <span class="wcpcm-credit-remaining" id="wcp-credit-remaining">&euro;<?php echo number_format($credit_remaining, 2, ',', '.'); ?></span>
             </div>
-            <h2 style="margin-bottom:1em;color:#274690;">Crea/aggiorna un utente su Nuova Formamentis</h2>
+            <h2 style="margin-bottom:1em;color:#274690;">Registrazione corsista su Nuova Formamentis</h2>
             <form id="wcp-create-user-form" class="wcpcm-create-coupon-form">
                 <div class="wcpcm-form-group">
                     <label class="wcpcm-label" for="wcp-course">Corso <span style="color:red">*</span></label>
@@ -202,7 +309,7 @@ class WC_Personal_Coupon_Manager {
                     <label class="wcpcm-label" for="wcp-email">Email utente <span style="color:red">*</span></label>
                     <input class="wcpcm-input" type="email" name="email" id="wcp-email" required placeholder="Inserisci email utente">
                 </div>
-                <button class="wcpcm-btn" type="submit">Crea utente</button>
+                <button class="wcpcm-btn" type="submit">Registra corsista</button>
             </form>
             <div id="wcp-form-msg"></div>
         </div>
@@ -228,9 +335,9 @@ class WC_Personal_Coupon_Manager {
         if ($course_id <= 0 && isset($_POST['product_id'])) {
             $course_id = intval($_POST['product_id']);
         }
-        $email      = isset($_POST['email']) ? sanitize_email($_POST['email']) : '';
+        $email      = isset($_POST['email'])      ? sanitize_email($_POST['email'])           : '';
         $first_name = isset($_POST['first_name']) ? sanitize_text_field($_POST['first_name']) : '';
-        $last_name  = isset($_POST['last_name']) ? sanitize_text_field($_POST['last_name']) : '';
+        $last_name  = isset($_POST['last_name'])  ? sanitize_text_field($_POST['last_name'])  : '';
 
         if (!$course_id || !$email || !$first_name || !$last_name || !is_email($email)) {
             wp_send_json_error(['msg' => "Compila tutti i campi obbligatori e inserisci un'email valida."]);
@@ -241,14 +348,15 @@ class WC_Personal_Coupon_Manager {
             wp_send_json_error(['msg' => 'Corso non valido.']);
         }
 
-        $remaining = $this->get_user_remaining_credit($user_id);
-        $activation_cost = (float) $selected_entry['cost'];
-        if ($activation_cost > $remaining) {
-            wp_send_json_error(['msg' => sprintf('Credito insufficiente. Credito disponibile: &euro;%s, credito richiesto per attivazione: &euro;%s.', number_format($remaining, 2, ',', '.'), number_format($activation_cost, 2, ',', '.'))]);
+        // Consume first available FIFO lot
+        $lot = $this->consume_first_available_lot($user_id);
+        if (!$lot) {
+            wp_send_json_error(['msg' => 'Nessun credito o slot utente disponibile.']);
         }
 
-        $course_name = $selected_entry['name'];
-        $current_user = wp_get_current_user();
+        $activation_cost = $lot['cost_per_user'];
+        $course_name     = $selected_entry['name'];
+        $current_user    = wp_get_current_user();
         $payload = [
             'action'     => 'create_user',
             'user_email' => $email,
@@ -267,10 +375,12 @@ class WC_Personal_Coupon_Manager {
         $response = $this->call_remote_api('/wp-json/nf/v1/create-user', 'POST', $payload);
 
         if (is_wp_error($response)) {
+            $this->rollback_lot_consumption($user_id, $lot['order_item_id'], $lot['cost_per_user']);
             wp_send_json_error(['msg' => 'Errore di connessione al sito remoto: ' . $response->get_error_message()]);
         }
 
         if (isset($response['success']) && !$response['success']) {
+            $this->rollback_lot_consumption($user_id, $lot['order_item_id'], $lot['cost_per_user']);
             $error_message = isset($response['message']) ? sanitize_text_field($response['message']) : 'Errore nella creazione/aggiornamento utente remoto.';
             wp_send_json_error(['msg' => $error_message]);
         }
@@ -283,21 +393,91 @@ class WC_Personal_Coupon_Manager {
         ]);
 
         if (is_wp_error($post_id)) {
+            $this->rollback_lot_consumption($user_id, $lot['order_item_id'], $lot['cost_per_user']);
             wp_send_json_error(['msg' => 'Utente creato/aggiornato sul sito remoto ma errore nel salvataggio storico locale.']);
         }
 
-        update_post_meta($post_id, 'wcp_credit_cost', $activation_cost);
-        update_post_meta($post_id, 'wcp_course_id', intval($course_id));
-        update_post_meta($post_id, 'wcp_course_name', $course_name);
-        update_post_meta($post_id, 'wcp_email', $email);
-        update_post_meta($post_id, 'wcp_first_name', $first_name);
-        update_post_meta($post_id, 'wcp_last_name', $last_name);
+        update_post_meta($post_id, 'wcp_credit_cost',       $activation_cost);
+        update_post_meta($post_id, 'wcp_course_id',         intval($course_id));
+        update_post_meta($post_id, 'wcp_course_name',       $course_name);
+        update_post_meta($post_id, 'wcp_email',             $email);
+        update_post_meta($post_id, 'wcp_first_name',        $first_name);
+        update_post_meta($post_id, 'wcp_last_name',         $last_name);
+        update_post_meta($post_id, 'wcp_order_id',          $lot['order_id']);
+        update_post_meta($post_id, 'wcp_order_item_id',     $lot['order_item_id']);
+        update_post_meta($post_id, 'wcp_credit_product_id', $lot['product_id']);
 
         $new_remaining = $this->get_user_remaining_credit($user_id);
 
         wp_send_json_success([
             'msg'              => 'Utente creato/aggiornato con successo su Nuova Formamentis.',
             'remaining_credit' => number_format($new_remaining, 2, ',', '.'),
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // AJAX: unenroll user
+    // -------------------------------------------------------------------------
+
+    public function handle_unenroll() {
+        check_ajax_referer('wcp_nonce', 'nonce');
+
+        $activation_id = isset($_POST['activation_id']) ? intval($_POST['activation_id']) : 0;
+        if (!$activation_id) {
+            wp_send_json_error(['msg' => 'ID attivazione non valido.']);
+        }
+
+        $post = get_post($activation_id);
+        if (!$post || $post->post_type !== 'wcp_user_activation' || $post->post_status !== 'publish') {
+            wp_send_json_error(['msg' => 'Attivazione non trovata.']);
+        }
+
+        $current_user_id = get_current_user_id();
+        if (!current_user_can('manage_options') && !($this->can_access() && (int) $post->post_author === $current_user_id)) {
+            wp_send_json_error(['msg' => 'Non hai i permessi.']);
+        }
+
+        $email         = (string) get_post_meta($activation_id, 'wcp_email',        true);
+        $course_id     = (int)    get_post_meta($activation_id, 'wcp_course_id',     true);
+        $order_item_id = (int)    get_post_meta($activation_id, 'wcp_order_item_id', true);
+        $cost          = (float)  get_post_meta($activation_id, 'wcp_credit_cost',   true);
+
+        $response = $this->call_remote_api('/wp-json/nf/v1/unenroll-user', 'POST', [
+            'action'     => 'unenroll_user',
+            'user_email' => $email,
+            'course_id'  => $course_id,
+        ]);
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(['msg' => 'Errore di connessione al sito remoto: ' . $response->get_error_message()]);
+        }
+
+        $success        = isset($response['success']) ? (bool) $response['success'] : false;
+        $msg            = isset($response['msg'])     ? $response['msg']     : (isset($response['message']) ? $response['message'] : '');
+        $user_not_found = false;
+
+        if (!$success) {
+            if (stripos((string) $msg, 'non trovato') !== false || stripos((string) $msg, 'not found') !== false) {
+                $user_not_found = true;
+            }
+        }
+
+        if (!$success && !$user_not_found) {
+            wp_send_json_error(['msg' => $msg ?: 'Errore durante la disiscrizione.']);
+        }
+
+        // Success or user_not_found: rollback lot and delete record
+        if ($order_item_id > 0 && $cost > 0) {
+            $this->rollback_lot_consumption((int) $post->post_author, $order_item_id, $cost);
+        }
+
+        wp_delete_post($activation_id, true);
+
+        $new_remaining = $this->get_user_remaining_credit((int) $post->post_author);
+
+        wp_send_json_success([
+            'remaining_credit' => number_format($new_remaining, 2, ',', '.'),
+            'post_id'          => $activation_id,
         ]);
     }
 
@@ -320,29 +500,39 @@ class WC_Personal_Coupon_Manager {
             return;
         }
 
+        $nonce = wp_create_nonce('wcp_nonce');
+
         echo '<table class="wcpcm-table"><thead><tr>
             <th>Email</th>
             <th>Nome</th>
             <th>Cognome</th>
             <th>Corso</th>
             <th>Credito scalato (&euro;)</th>
+            <th>N. Ordine</th>
             <th>Creato il</th>
+            <th>Azioni</th>
         </tr></thead><tbody>';
 
         foreach ($posts as $post) {
-            $amount       = (float) get_post_meta($post->ID, 'wcp_credit_cost', true);
-            $first_name   = (string) get_post_meta($post->ID, 'wcp_first_name', true);
-            $last_name    = (string) get_post_meta($post->ID, 'wcp_last_name', true);
-            $course_name  = (string) get_post_meta($post->ID, 'wcp_course_name', true);
-            $email        = get_post_meta($post->ID, 'wcp_email', true);
+            $amount      = (float)  get_post_meta($post->ID, 'wcp_credit_cost',  true);
+            $first_name  = (string) get_post_meta($post->ID, 'wcp_first_name',   true);
+            $last_name   = (string) get_post_meta($post->ID, 'wcp_last_name',    true);
+            $course_name = (string) get_post_meta($post->ID, 'wcp_course_name',  true);
+            $email       = (string) get_post_meta($post->ID, 'wcp_email',        true);
+            $order_id    = (int)    get_post_meta($post->ID, 'wcp_order_id',     true);
 
             echo '<tr>';
             echo '<td>' . esc_html($email) . '</td>';
             echo '<td>' . esc_html($first_name) . '</td>';
             echo '<td>' . esc_html($last_name) . '</td>';
             echo '<td>' . esc_html($course_name) . '</td>';
-            echo '<td>&euro;' . number_format($amount > 0 ? $amount : 1, 2, ',', '.') . '</td>';
+            echo '<td>&euro;' . number_format($amount > 0 ? $amount : 1.0, 2, ',', '.') . '</td>';
+            echo '<td>' . ($order_id > 0 ? esc_html((string) $order_id) : '&mdash;') . '</td>';
             echo '<td>' . esc_html(date_i18n('d/m/Y', strtotime($post->post_date))) . '</td>';
+            echo '<td><button class="wcpcm-btn wcpcm-btn-danger wcp-unenroll-btn" '
+                . 'data-id="' . esc_attr($post->ID) . '" '
+                . 'data-nonce="' . esc_attr($nonce) . '" '
+                . 'style="font-size:0.85em;padding:4px 10px;">Annulla</button></td>';
             echo '</tr>';
         }
 
@@ -467,9 +657,31 @@ class WC_Personal_Coupon_Manager {
             return;
         }
 
-        $remote_url    = get_option('wcp_remote_site_url', '');
-        $secret_key    = get_option('wcp_secret_key', '');
-        $credit_ids    = get_option('wcp_credit_product_ids', '206657');
+        $remote_url          = get_option('wcp_remote_site_url', '');
+        $secret_key          = get_option('wcp_secret_key', '');
+        $credit_products_map = get_option('wcp_credit_products_map', []);
+        if (!is_array($credit_products_map)) {
+            $credit_products_map = [];
+        }
+
+        // Migration: if credit products map is empty but old IDs option exists, pre-populate rows
+        $show_migration_notice = false;
+        if (empty($credit_products_map)) {
+            $old_ids_raw = get_option('wcp_credit_product_ids', '');
+            if ($old_ids_raw) {
+                $old_ids = preg_split('/[\s,]+/', (string) $old_ids_raw, -1, PREG_SPLIT_NO_EMPTY);
+                foreach ($old_ids as $oid) {
+                    $credit_products_map[] = [
+                        'product_id'       => intval($oid),
+                        'credit_generated' => '0.00',
+                        'users_allowed'    => 0,
+                        'cost_per_user'    => '0.00',
+                    ];
+                }
+                $show_migration_notice = !empty($credit_products_map);
+            }
+        }
+
         $products_map  = $this->get_normalized_products_map();
         $allowed_roles = get_option('wcp_allowed_roles', ['administrator']);
         if (!is_array($allowed_roles)) {
@@ -488,6 +700,11 @@ class WC_Personal_Coupon_Manager {
             <?php if ($generated) : ?>
                 <div class="notice notice-success is-dismissible">
                     <p><strong>Chiave segreta generata e salvata.</strong> Copia la chiave dal campo qui sotto e usala su Sito B come valore dell'header <code>X-NF-SECRET</code>.</p>
+                </div>
+            <?php endif; ?>
+            <?php if ($show_migration_notice) : ?>
+                <div class="notice notice-warning is-dismissible">
+                    <p>Configura i nuovi campi prodotti credito: per ogni riga inserisci credito generato, utenti e costo per utente.</p>
                 </div>
             <?php endif; ?>
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
@@ -520,31 +737,72 @@ class WC_Personal_Coupon_Manager {
                     </tr>
                 </table>
 
-                <h2>2. Prodotti credito (Sito A)</h2>
-                <p>Inserisci gli ID prodotto del Sito A che danno credito (uno per riga o separati da virgola).</p>
-                <table class="form-table">
-                    <tr>
-                        <th><label for="wcp_credit_product_ids">ID prodotti credito</label></th>
-                        <td>
-                            <textarea id="wcp_credit_product_ids" name="wcp_credit_product_ids"
-                                      rows="4" class="large-text"><?php echo esc_textarea($credit_ids); ?></textarea>
-                        </td>
-                    </tr>
-                </table>
+                <h2>2. Prodotti che generano credito (Sito A)</h2>
+                <p>Definisci i prodotti di Sito A che generano credito, il credito generato, gli utenti creabili e il costo per registrazione (deve valere: credito generato = utenti &times; costo per utente).</p>
+                <div id="wcp-credit-products-map">
+                    <?php
+                    if (!empty($credit_products_map)) {
+                        foreach ($credit_products_map as $i => $entry) {
+                            $pid = isset($entry['product_id'])       ? intval($entry['product_id'])    : 0;
+                            $cg  = isset($entry['credit_generated']) ? $entry['credit_generated']      : '0.00';
+                            $ua  = isset($entry['users_allowed'])    ? intval($entry['users_allowed']) : 0;
+                            $cpu = isset($entry['cost_per_user'])    ? $entry['cost_per_user']         : '0.00';
+                            echo '<div class="wcp-credit-row" style="display:flex;gap:8px;margin-bottom:6px;">';
+                            echo '<input type="number" name="wcp_credit_products_map[' . $i . '][product_id]" value="' . esc_attr($pid) . '" placeholder="ID prodotto" min="1" step="1" style="flex:1;">';
+                            echo '<input type="text" inputmode="decimal" name="wcp_credit_products_map[' . $i . '][credit_generated]" value="' . esc_attr($cg) . '" placeholder="Credito &euro;" style="flex:1;">';
+                            echo '<input type="number" name="wcp_credit_products_map[' . $i . '][users_allowed]" value="' . esc_attr($ua) . '" placeholder="N. utenti" min="1" step="1" style="flex:1;">';
+                            echo '<input type="text" inputmode="decimal" name="wcp_credit_products_map[' . $i . '][cost_per_user]" value="' . esc_attr($cpu) . '" placeholder="Costo/utente &euro;" style="flex:1;">';
+                            echo '<button type="button" class="button wcp-remove-credit-row">Rimuovi</button>';
+                            echo '</div>';
+                        }
+                    } else {
+                        echo '<div class="wcp-credit-row" style="display:flex;gap:8px;margin-bottom:6px;">';
+                        echo '<input type="number" name="wcp_credit_products_map[0][product_id]" value="" placeholder="ID prodotto" min="1" step="1" style="flex:1;">';
+                        echo '<input type="text" inputmode="decimal" name="wcp_credit_products_map[0][credit_generated]" value="" placeholder="Credito &euro;" style="flex:1;">';
+                        echo '<input type="number" name="wcp_credit_products_map[0][users_allowed]" value="" placeholder="N. utenti" min="1" step="1" style="flex:1;">';
+                        echo '<input type="text" inputmode="decimal" name="wcp_credit_products_map[0][cost_per_user]" value="" placeholder="Costo/utente &euro;" style="flex:1;">';
+                        echo '<button type="button" class="button wcp-remove-credit-row">Rimuovi</button>';
+                        echo '</div>';
+                    }
+                    ?>
+                </div>
+                <button type="button" id="wcp-add-credit-row" class="button">+ Aggiungi prodotto credito</button>
+                <script>
+                (function () {
+                    var container = document.getElementById('wcp-credit-products-map');
+                    var idx = container.querySelectorAll('.wcp-credit-row').length;
+                    document.getElementById('wcp-add-credit-row').addEventListener('click', function () {
+                        var row = document.createElement('div');
+                        row.className = 'wcp-credit-row';
+                        row.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;';
+                        row.innerHTML =
+                            '<input type="number" name="wcp_credit_products_map[' + idx + '][product_id]" value="" placeholder="ID prodotto" min="1" step="1" style="flex:1;">'
+                            + '<input type="text" inputmode="decimal" name="wcp_credit_products_map[' + idx + '][credit_generated]" value="" placeholder="Credito \u20ac" style="flex:1;">'
+                            + '<input type="number" name="wcp_credit_products_map[' + idx + '][users_allowed]" value="" placeholder="N. utenti" min="1" step="1" style="flex:1;">'
+                            + '<input type="text" inputmode="decimal" name="wcp_credit_products_map[' + idx + '][cost_per_user]" value="" placeholder="Costo/utente \u20ac" style="flex:1;">'
+                            + '<button type="button" class="button wcp-remove-credit-row">Rimuovi</button>';
+                        container.appendChild(row);
+                        idx++;
+                    });
+                    container.addEventListener('click', function (e) {
+                        if (e.target && e.target.classList.contains('wcp-remove-credit-row')) {
+                            e.target.closest('.wcp-credit-row').remove();
+                        }
+                    });
+                })();
+                </script>
 
                 <h2>3. Corsi disponibili (Sito B)</h2>
-                <p>Mappa "Nome visualizzato" &rarr; "ID corso su Sito B" con costo attivazione in EUR.</p>
+                <p>Mappa "Nome visualizzato" &rarr; "ID corso su Sito B".</p>
                 <div id="wcp-products-map">
                     <?php
                     if (!empty($products_map)) {
                         foreach ($products_map as $i => $entry) {
-                            $name      = isset($entry['name']) ? $entry['name'] : '';
+                            $name      = isset($entry['name'])      ? $entry['name']      : '';
                             $course_id = isset($entry['course_id']) ? $entry['course_id'] : '';
-                            $cost      = isset($entry['cost']) ? number_format((float) $entry['cost'], 2, '.', '') : number_format(self::DEFAULT_ACTIVATION_COST, 2, '.', '');
                             echo '<div class="wcp-map-row" style="display:flex;gap:8px;margin-bottom:6px;">';
                             echo '<input type="text" name="wcp_products_map[' . $i . '][name]" value="' . esc_attr($name) . '" placeholder="Nome prodotto" style="flex:2;">';
                             echo '<input type="number" name="wcp_products_map[' . $i . '][course_id]" value="' . esc_attr($course_id) . '" placeholder="ID corso su Sito B" min="1" step="1" style="flex:1;">';
-                            echo '<input type="text" inputmode="decimal" aria-label="Costo attivazione in EUR" name="wcp_products_map[' . $i . '][cost]" value="' . esc_attr($cost) . '" placeholder="Costo EUR (es. 1,50)" style="flex:1;">';
                             echo '<button type="button" class="button wcp-remove-row">Rimuovi</button>';
                             echo '</div>';
                         }
@@ -552,7 +810,6 @@ class WC_Personal_Coupon_Manager {
                         echo '<div class="wcp-map-row" style="display:flex;gap:8px;margin-bottom:6px;">';
                         echo '<input type="text" name="wcp_products_map[0][name]" value="" placeholder="Nome prodotto" style="flex:2;">';
                         echo '<input type="number" name="wcp_products_map[0][course_id]" value="" placeholder="ID corso su Sito B" min="1" step="1" style="flex:1;">';
-                        echo '<input type="text" inputmode="decimal" aria-label="Costo attivazione in EUR" name="wcp_products_map[0][cost]" value="' . esc_attr(number_format(self::DEFAULT_ACTIVATION_COST, 2, '.', '')) . '" placeholder="Costo EUR (es. 1,50)" style="flex:1;">';
                         echo '<button type="button" class="button wcp-remove-row">Rimuovi</button>';
                         echo '</div>';
                     }
@@ -560,22 +817,21 @@ class WC_Personal_Coupon_Manager {
                 </div>
                 <button type="button" id="wcp-add-row" class="button">+ Aggiungi prodotto</button>
                 <script>
-                (function(){
+                (function () {
                     var container = document.getElementById('wcp-products-map');
-                    var defaultCost = '<?php echo esc_js(number_format(self::DEFAULT_ACTIVATION_COST, 2, '.', '')); ?>';
                     var idx = container.querySelectorAll('.wcp-map-row').length;
-                    document.getElementById('wcp-add-row').addEventListener('click', function(){
+                    document.getElementById('wcp-add-row').addEventListener('click', function () {
                         var row = document.createElement('div');
                         row.className = 'wcp-map-row';
                         row.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;';
-                        row.innerHTML = '<input type="text" name="wcp_products_map['+idx+'][name]" value="" placeholder="Nome prodotto" style="flex:2;">'
-                            + '<input type="number" name="wcp_products_map['+idx+'][course_id]" value="" placeholder="ID corso su Sito B" min="1" step="1" style="flex:1;">'
-                            + '<input type="text" inputmode="decimal" aria-label="Costo attivazione in EUR" name="wcp_products_map['+idx+'][cost]" value="'+defaultCost+'" placeholder="Costo EUR (es. 1,50)" style="flex:1;">'
+                        row.innerHTML =
+                            '<input type="text" name="wcp_products_map[' + idx + '][name]" value="" placeholder="Nome prodotto" style="flex:2;">'
+                            + '<input type="number" name="wcp_products_map[' + idx + '][course_id]" value="" placeholder="ID corso su Sito B" min="1" step="1" style="flex:1;">'
                             + '<button type="button" class="button wcp-remove-row">Rimuovi</button>';
                         container.appendChild(row);
                         idx++;
                     });
-                    container.addEventListener('click', function(e){
+                    container.addEventListener('click', function (e) {
                         if (e.target && e.target.classList.contains('wcp-remove-row')) {
                             e.target.closest('.wcp-map-row').remove();
                         }
@@ -623,27 +879,56 @@ class WC_Personal_Coupon_Manager {
         }
         check_admin_referer('wcp_settings_nonce', 'wcp_settings_nonce_field');
 
+        // Validate credit products map FIRST – if any row fails, do NOT save anything
+        $raw_credit_map   = isset($_POST['wcp_credit_products_map']) ? (array) $_POST['wcp_credit_products_map'] : [];
+        $credit_map_clean = [];
+        foreach ($raw_credit_map as $entry) {
+            $pid = isset($entry['product_id'])       ? intval($entry['product_id'])                          : 0;
+            $cg  = isset($entry['credit_generated']) ? $this->parse_eur_cost($entry['credit_generated'])     : 0.0;
+            $ua  = isset($entry['users_allowed'])    ? intval($entry['users_allowed'])                       : 0;
+            $cpu = isset($entry['cost_per_user'])    ? $this->parse_eur_cost($entry['cost_per_user'])        : 0.0;
+
+            // Skip fully empty rows
+            if (!$pid && !$cg && !$ua && !$cpu) {
+                continue;
+            }
+
+            if (abs($cg - ($ua * $cpu)) > self::CREDIT_VALIDATION_TOLERANCE) {
+                $expected = $ua * $cpu;
+                $error_msg = urlencode(sprintf(
+                    'Errore validazione prodotto ID %d: credito generato (%.2f) deve essere uguale a utenti (%d) × costo per utente (%.2f) = %.2f.',
+                    $pid, $cg, $ua, $cpu, $expected
+                ));
+                wp_redirect(admin_url('admin.php?page=wcp-settings&wcp_error=' . $error_msg));
+                exit;
+            }
+
+            $credit_map_clean[] = [
+                'product_id'       => $pid,
+                'credit_generated' => round($cg, 2),
+                'users_allowed'    => $ua,
+                'cost_per_user'    => round($cpu, 2),
+            ];
+        }
+
+        // All validation passed – save everything
         $remote_url = isset($_POST['wcp_remote_site_url']) ? esc_url_raw(trim($_POST['wcp_remote_site_url'])) : '';
         update_option('wcp_remote_site_url', $remote_url);
 
         $secret_key = isset($_POST['wcp_secret_key']) ? sanitize_text_field($_POST['wcp_secret_key']) : '';
         update_option('wcp_secret_key', $secret_key);
 
-        $credit_ids_raw = isset($_POST['wcp_credit_product_ids']) ? sanitize_textarea_field($_POST['wcp_credit_product_ids']) : '206657';
-        update_option('wcp_credit_product_ids', $credit_ids_raw);
+        update_option('wcp_credit_products_map', $credit_map_clean);
 
         $raw_map      = isset($_POST['wcp_products_map']) ? (array) $_POST['wcp_products_map'] : [];
         $products_map = [];
         foreach ($raw_map as $entry) {
             $name      = isset($entry['name']) ? sanitize_text_field($entry['name']) : '';
             $course_id = $this->get_course_id_from_map_entry($entry);
-            $cost      = isset($entry['cost']) ? $this->parse_eur_cost($entry['cost']) : self::DEFAULT_ACTIVATION_COST;
-
-            if ($name && $course_id && $cost > 0) {
+            if ($name && $course_id) {
                 $products_map[] = [
                     'name'      => $name,
                     'course_id' => $course_id,
-                    'cost'      => round($cost, 2),
                 ];
             }
         }
@@ -668,7 +953,7 @@ class WC_Personal_Coupon_Manager {
 
         // wp_generate_password(48) produces 48 random characters; base64_encode()
         // converts them to exactly 64 URL/define-safe characters (A-Z, a-z, 0-9, +, /, =).
-        $raw = wp_generate_password(48, true, false);
+        $raw        = wp_generate_password(48, true, false);
         $secret_key = base64_encode($raw);
 
         update_option('wcp_secret_key', $secret_key);
@@ -680,12 +965,6 @@ class WC_Personal_Coupon_Manager {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
-
-    private function get_credit_product_ids() {
-        $raw = get_option('wcp_credit_product_ids', '206657');
-        $ids = preg_split('/[\s,]+/', $raw, -1, PREG_SPLIT_NO_EMPTY);
-        return array_map('intval', $ids);
-    }
 
     private function get_products_map_entry_by_course_id($course_id) {
         $products_map = $this->get_normalized_products_map();
@@ -713,14 +992,9 @@ class WC_Personal_Coupon_Manager {
             if (!$name || !$course_id) {
                 continue;
             }
-            $cost = isset($entry['cost']) ? $this->parse_eur_cost($entry['cost']) : self::DEFAULT_ACTIVATION_COST;
-            if ($cost <= 0) {
-                $cost = self::DEFAULT_ACTIVATION_COST;
-            }
             $products_map[] = [
                 'name'      => $name,
                 'course_id' => $course_id,
-                'cost'      => round($cost, 2),
             ];
         }
         return $products_map;
