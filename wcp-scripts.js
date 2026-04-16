@@ -5,7 +5,7 @@ jQuery(function ($) {
         $('#wcp-credit-remaining').text('\u20ac' + value);
     }
 
-    // Submit form creazione utente
+    // Submit form registrazione corsista
     $(document).on('submit', '#wcp-create-user-form', function (e) {
         e.preventDefault();
 
@@ -19,7 +19,7 @@ jQuery(function ($) {
         $form.find('.wcpcm-input').css('border-color', '#d8e2ff');
         $('#wcp-form-msg').html('');
 
-        var valid = true;
+        var valid  = true;
         var errors = [];
 
         if (!courseId) {
@@ -56,7 +56,7 @@ jQuery(function ($) {
         }
 
         var $btn = $form.find('.wcpcm-btn');
-        $btn.prop('disabled', true).text('Creazione in corso...');
+        $btn.prop('disabled', true).text('Registrazione in corso...');
 
         $.ajax({
             url:      wcp_ajax.ajax_url,
@@ -88,10 +88,41 @@ jQuery(function ($) {
                 $('#wcp-form-msg').html('<div class="wcpcm-error">Errore di rete, riprova.</div>');
             },
             complete: function () {
-                $btn.prop('disabled', false).text('Crea utente');
+                $btn.prop('disabled', false).text('Registra corsista');
             }
         });
 
         return false;
+    });
+
+    // Annulla registrazione (unenroll)
+    $(document).on('click', '.wcp-unenroll-btn', function () {
+        if (!confirm('Annullare questa registrazione?')) return;
+        var $btn   = $(this);
+        var postId = $btn.data('id');
+        var nonce  = $btn.data('nonce') || (window.wcp_ajax && wcp_ajax.nonce) || '';
+        $btn.prop('disabled', true).text('Annullamento...');
+        $.ajax({
+            url:      (window.wcp_ajax && wcp_ajax.ajax_url) || ajaxurl,
+            type:     'POST',
+            dataType: 'json',
+            data: { action: 'wcp_unenroll_user', nonce: nonce, activation_id: postId },
+            success: function (response) {
+                if (response.success) {
+                    $btn.closest('tr').fadeOut(400, function () { $(this).remove(); });
+                    if (response.data && response.data.remaining_credit !== undefined) {
+                        updateRemainingCredit(response.data.remaining_credit);
+                        $('#wcp-credit-remaining').text('\u20ac' + response.data.remaining_credit);
+                    }
+                } else {
+                    alert('Errore: ' + (response.data ? response.data.msg : 'Errore sconosciuto'));
+                    $btn.prop('disabled', false).text('Annulla');
+                }
+            },
+            error: function () {
+                alert('Errore di rete.');
+                $btn.prop('disabled', false).text('Annulla');
+            }
+        });
     });
 });
