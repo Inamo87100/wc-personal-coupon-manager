@@ -8,7 +8,8 @@ Author: Inamo87100
 if (!defined('ABSPATH')) exit;
 
 class WC_Personal_Coupon_Manager {
-    private const VALID_COST_PATTERN = '/^(?:\d+|\d*\.\d+)$/';
+    private const VALID_COST_PATTERN          = '/^(?:\d+|\d*\.\d+)$/';
+    private const CREDIT_VALIDATION_TOLERANCE = 0.001;
 
     public function __construct() {
         add_action('init', [$this, 'add_my_account_endpoint']);
@@ -436,11 +437,10 @@ class WC_Personal_Coupon_Manager {
             wp_send_json_error(['msg' => 'Non hai i permessi.']);
         }
 
-        $email         = (string) get_post_meta($activation_id, 'wcp_email',         true);
-        $course_id     = (int)    get_post_meta($activation_id, 'wcp_course_id',      true);
-        $order_item_id = (int)    get_post_meta($activation_id, 'wcp_order_item_id',  true);
-        $cost          = (float)  get_post_meta($activation_id, 'wcp_credit_cost',    true);
-        $order_id      = (int)    get_post_meta($activation_id, 'wcp_order_id',       true); // phpcs:ignore -- stored for reference
+        $email         = (string) get_post_meta($activation_id, 'wcp_email',        true);
+        $course_id     = (int)    get_post_meta($activation_id, 'wcp_course_id',     true);
+        $order_item_id = (int)    get_post_meta($activation_id, 'wcp_order_item_id', true);
+        $cost          = (float)  get_post_meta($activation_id, 'wcp_credit_cost',   true);
 
         $response = $this->call_remote_api('/wp-json/nf/v1/unenroll-user', 'POST', [
             'action'     => 'unenroll_user',
@@ -893,7 +893,7 @@ class WC_Personal_Coupon_Manager {
                 continue;
             }
 
-            if (abs($cg - ($ua * $cpu)) > 0.001) {
+            if (abs($cg - ($ua * $cpu)) > self::CREDIT_VALIDATION_TOLERANCE) {
                 $error_msg = urlencode(sprintf(
                     'Errore validazione prodotto ID %d: credito generato (%.2f) deve essere uguale a utenti (%d) × costo per utente (%.2f) = %.2f.',
                     $pid, $cg, $ua, $cpu, $ua * $cpu

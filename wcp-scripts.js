@@ -19,7 +19,7 @@ jQuery(function ($) {
         $form.find('.wcpcm-input').css('border-color', '#d8e2ff');
         $('#wcp-form-msg').html('');
 
-        var valid  = true;
+        var valid = true;
         var errors = [];
 
         if (!courseId) {
