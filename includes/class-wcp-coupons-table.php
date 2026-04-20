@@ -51,6 +51,36 @@ class WCP_Coupons_Table extends WP_List_Table {
     }
 
     /**
+     * Builds a filter URL preserving current query args, applying $overrides.
+     * If an override value is '' or null, the parameter is removed (explicit reset).
+     */
+    private function build_filter_url(array $overrides = []) {
+        $args = [
+            'page'              => isset($_GET['page'])             ? sanitize_text_field(wp_unslash($_GET['page']))    : 'wcp-manager',
+            's'                 => isset($_GET['s'])                ? sanitize_text_field(wp_unslash($_GET['s']))       : '',
+            'orderby'           => isset($_GET['orderby'])          ? sanitize_text_field(wp_unslash($_GET['orderby'])) : '',
+            'order'             => isset($_GET['order'])            ? sanitize_text_field(wp_unslash($_GET['order']))   : '',
+            'filter_order_id'   => isset($_GET['filter_order_id'])  ? intval($_GET['filter_order_id'])                 : '',
+            'filter_creator_id' => isset($_GET['filter_creator_id']) ? intval($_GET['filter_creator_id'])              : '',
+            'paged'             => isset($_GET['paged'])            ? intval($_GET['paged'])                           : '',
+        ];
+
+        foreach ($overrides as $k => $v) {
+            if ($v === '' || $v === null) {
+                unset($args[$k]);
+            } else {
+                $args[$k] = $v;
+            }
+        }
+
+        $args = array_filter($args, function ($v) {
+            return $v !== '' && $v !== 0 && $v !== null;
+        });
+
+        return add_query_arg($args, admin_url('admin.php'));
+    }
+
+    /**
      * Returns an associative array of user_id => "login (email)" for all users
      * who have at least one activation record (based on post_author).
      */
@@ -208,23 +238,39 @@ class WCP_Coupons_Table extends WP_List_Table {
                 if ($oid <= 0) {
                     return '&mdash;';
                 }
+                $filter_url = $this->build_filter_url([
+                    'filter_order_id'   => $oid,
+                    'filter_creator_id' => '',
+                    'paged'             => 1,
+                ]);
+                $html = '<a href="' . esc_url($filter_url) . '">#' . esc_html((string) $oid) . '</a>';
                 $edit_url = get_edit_post_link($oid);
                 if ($edit_url) {
-                    return '<a href="' . esc_url($edit_url) . '" target="_blank">#' . esc_html((string) $oid) . '</a>';
+                    $html .= ' <a href="' . esc_url($edit_url) . '" target="_blank" rel="noopener noreferrer" style="font-size:12px;">(Apri)</a>';
                 }
-                return '#' . esc_html((string) $oid);
+                return $html;
 
             case 'created_by':
+                $creator_id = (int) get_post_meta($item->ID, 'wcp_created_by_user_id', true);
+                if ($creator_id <= 0) {
+                    $creator_id = (int) $item->post_author;
+                }
                 $display = (string) get_post_meta($item->ID, 'wcp_created_by_display', true);
-                if ($display !== '') {
-                    return esc_html($display);
+                if ($display === '' && $creator_id > 0) {
+                    $author = get_userdata($creator_id);
+                    if ($author) {
+                        $display = sprintf('%s (%s)', $author->user_login, $author->user_email);
+                    }
                 }
-                // Fallback: use post_author data for records created before this feature.
-                $author = get_userdata((int) $item->post_author);
-                if ($author) {
-                    return esc_html(sprintf('%s (%s)', $author->user_login, $author->user_email));
+                if ($display === '' || $creator_id <= 0) {
+                    return '&mdash;';
                 }
-                return '&mdash;';
+                $filter_url = $this->build_filter_url([
+                    'filter_creator_id' => $creator_id,
+                    'filter_order_id'   => '',
+                    'paged'             => 1,
+                ]);
+                return '<a href="' . esc_url($filter_url) . '">' . esc_html($display) . '</a>';
 
             case 'post_date':
                 return esc_html(date_i18n('d/m/Y H:i', strtotime($item->post_date)));
