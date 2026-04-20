@@ -184,6 +184,30 @@ class WCP_Coupons_Table extends WP_List_Table {
         ];
     }
 
+    /**
+     * Builds a base set of query args for filter links, preserving the
+     * current search term, ordering, and any extra args supplied.
+     *
+     * @param array $extra Additional args to merge (e.g. filter_creator_id).
+     * @return array
+     */
+    private function get_filter_link_args(array $extra = []) {
+        $args    = array_merge(['page' => 'wcp-manager'], $extra);
+        $s       = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+        $orderby = isset($_GET['orderby']) ? sanitize_text_field(wp_unslash($_GET['orderby'])) : '';
+        $order   = isset($_GET['order'])   ? strtoupper(sanitize_text_field(wp_unslash($_GET['order']))) : '';
+        if ($s !== '') {
+            $args['s'] = $s;
+        }
+        if (in_array($orderby, ['post_title', 'post_date'], true)) {
+            $args['orderby'] = $orderby;
+        }
+        if (in_array($order, ['ASC', 'DESC'], true)) {
+            $args['order'] = $order;
+        }
+        return $args;
+    }
+
     public function column_default($item, $column_name) {
         switch ($column_name) {
             case 'email':
@@ -208,23 +232,38 @@ class WCP_Coupons_Table extends WP_List_Table {
                 if ($oid <= 0) {
                     return '&mdash;';
                 }
-                $edit_url = get_edit_post_link($oid);
-                if ($edit_url) {
-                    return '<a href="' . esc_url($edit_url) . '" target="_blank">#' . esc_html((string) $oid) . '</a>';
-                }
-                return '#' . esc_html((string) $oid);
+                $oid_url = add_query_arg(
+                    $this->get_filter_link_args(['filter_order_id' => $oid]),
+                    admin_url('admin.php')
+                );
+                return '<a href="' . esc_url($oid_url) . '">#' . esc_html((string) $oid) . '</a>';
 
             case 'created_by':
-                $display = (string) get_post_meta($item->ID, 'wcp_created_by_display', true);
-                if ($display !== '') {
-                    return esc_html($display);
+                $display    = (string) get_post_meta($item->ID, 'wcp_created_by_display', true);
+                $creator_id = (int) get_post_meta($item->ID, 'wcp_created_by_user_id', true);
+                if ($creator_id <= 0) {
+                    $creator_id = (int) $item->post_author;
                 }
-                // Fallback: use post_author data for records created before this feature.
-                $author = get_userdata((int) $item->post_author);
-                if ($author) {
-                    return esc_html(sprintf('%s (%s)', $author->user_login, $author->user_email));
+                if ($display === '') {
+                    // Fallback: use post_author data for records created before this feature.
+                    $author = get_userdata($creator_id);
+                    if ($author) {
+                        $display = sprintf('%s (%s)', $author->user_login, $author->user_email);
+                    }
                 }
-                return '&mdash;';
+                if ($display === '' || $creator_id <= 0) {
+                    return '&mdash;';
+                }
+                $extra = ['filter_creator_id' => $creator_id];
+                $existing_order_filter = isset($_GET['filter_order_id']) ? intval($_GET['filter_order_id']) : 0;
+                if ($existing_order_filter > 0) {
+                    $extra['filter_order_id'] = $existing_order_filter;
+                }
+                $cb_url = add_query_arg(
+                    $this->get_filter_link_args($extra),
+                    admin_url('admin.php')
+                );
+                return '<a href="' . esc_url($cb_url) . '">' . esc_html($display) . '</a>';
 
             case 'post_date':
                 return esc_html(date_i18n('d/m/Y H:i', strtotime($item->post_date)));
