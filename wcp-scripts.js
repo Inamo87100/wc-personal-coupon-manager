@@ -1,47 +1,38 @@
 jQuery(function ($) {
-
-    // Aggiorna il credito residuo visualizzato
+    // update remaining credit helper (se presente nel tuo file originale, lascia invariato)
     function updateRemainingCredit(value) {
-        $('#wcp-credit-remaining').text('\u20ac' + value);
+        // Se hai già questa funzione completa nel file, NON sostituirla con questo placeholder.
+        var $el = $('#wcp-remaining-credit');
+        if ($el.length) $el.text(value);
     }
 
-    // Submit form registrazione corsista
+    // Form submit: crea utente (rimane)
     $(document).on('submit', '#wcp-create-user-form', function (e) {
         e.preventDefault();
 
-        var $form     = $(this);
-        var courseId  = $('#wcp-course').val();
-        var email     = $('#wcp-email').val();
-        var firstName = $('#wcp-first-name').val();
-        var lastName  = $('#wcp-last-name').val();
+        var $form = $(this);
+        var courseId   = $('#wcp-course').val();
+        var email      = $('#wcp-email').val();
+        var firstName  = $('#wcp-first-name').val();
+        var lastName   = $('#wcp-last-name').val();
 
-        // Reset stili
-        $form.find('.wcpcm-input').css('border-color', '#d8e2ff');
-        $('#wcp-form-msg').html('');
-
-        var valid = true;
         var errors = [];
+        var valid = true;
 
         if (!courseId) {
             valid = false;
             errors.push('Seleziona un corso.');
             $('#wcp-course').css('border-color', '#c0392b');
+        } else {
+            $('#wcp-course').css('border-color', '');
         }
-        if (!firstName) {
-            valid = false;
-            errors.push('Inserisci il nome.');
-            $('#wcp-first-name').css('border-color', '#c0392b');
-        }
-        if (!lastName) {
-            valid = false;
-            errors.push('Inserisci il cognome.');
-            $('#wcp-last-name').css('border-color', '#c0392b');
-        }
-        var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!email || !emailRegex.test(email)) {
+
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             valid = false;
             errors.push("Inserisci un'email valida.");
             $('#wcp-email').css('border-color', '#c0392b');
+        } else {
+            $('#wcp-email').css('border-color', '');
         }
 
         if (!valid) {
@@ -85,7 +76,7 @@ jQuery(function ($) {
                 }
             },
             error: function () {
-                $('#wcp-form-msg').html('<div class="wcpcm-error">Errore di rete, riprova.</div>');
+                $('#wcp-form-msg').html('<div class="wcpcm-error">Errore di rete, riprova.</div>').show();
             },
             complete: function () {
                 $btn.prop('disabled', false).text('Registra corsista');
@@ -95,33 +86,5 @@ jQuery(function ($) {
         return false;
     });
 
-    // Annulla registrazione (unenroll)
-    $(document).on('click', '.wcp-unenroll-btn', function () {
-        if (!confirm('Annullare questa registrazione?')) return;
-        var $btn   = $(this);
-        var postId = $btn.data('id');
-        var nonce  = $btn.data('nonce') || (window.wcp_ajax && wcp_ajax.nonce) || '';
-        $btn.prop('disabled', true).text('Annullamento...');
-        $.ajax({
-            url:      (window.wcp_ajax && wcp_ajax.ajax_url) || ajaxurl,
-            type:     'POST',
-            dataType: 'json',
-            data: { action: 'wcp_unenroll_user', nonce: nonce, activation_id: postId },
-            success: function (response) {
-                if (response.success) {
-                    $btn.closest('tr').fadeOut(400, function () { $(this).remove(); });
-                    if (response.data && response.data.remaining_credit !== undefined) {
-                        updateRemainingCredit(response.data.remaining_credit);
-                    }
-                } else {
-                    alert('Errore: ' + (response.data ? response.data.msg : 'Errore sconosciuto'));
-                    $btn.prop('disabled', false).text('Annulla');
-                }
-            },
-            error: function () {
-                alert('Errore di rete.');
-                $btn.prop('disabled', false).text('Annulla');
-            }
-        });
-    });
+    // NOTE: blocco "Annulla registrazione (unenroll)" rimosso.
 });
