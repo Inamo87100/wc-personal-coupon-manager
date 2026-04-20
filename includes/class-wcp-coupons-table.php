@@ -33,6 +33,7 @@ class WCP_Coupons_Table extends WP_List_Table {
             'course_name' => 'Corso',
             'amount'      => 'Credito scalato (&euro;)',
             'order_id'    => 'N. Ordine',
+            'created_by'  => 'Creato da',
             'post_date'   => 'Data attivazione',
             'actions'     => 'Azioni',
         ];
@@ -49,32 +50,119 @@ class WCP_Coupons_Table extends WP_List_Table {
         return [];
     }
 
+    /**
+     * Returns an associative array of user_id => "login (email)" for all users
+     * who have at least one activation record (based on post_author).
+     */
+    private function get_creator_options() {
+        global $wpdb;
+        $author_ids = $wpdb->get_col(
+            $wpdb->prepare(
+                "SELECT DISTINCT post_author FROM {$wpdb->posts}
+                 WHERE post_type = %s AND post_status = %s",
+                'wcp_user_activation',
+                'publish'
+            )
+        );
+        $options = [];
+        foreach ($author_ids as $uid) {
+            $user = get_userdata((int) $uid);
+            if ($user) {
+                $options[(int) $uid] = sprintf('%s (%s)', $user->user_login, $user->user_email);
+            }
+        }
+        return $options;
+    }
+
+    public function extra_tablenav($which) {
+        if ($which !== 'top') {
+            return;
+        }
+
+        $filter_order_id   = isset($_GET['filter_order_id'])   ? intval($_GET['filter_order_id'])   : 0;
+        $filter_creator_id = isset($_GET['filter_creator_id']) ? intval($_GET['filter_creator_id']) : 0;
+        $search            = isset($_GET['s'])                  ? sanitize_text_field($_GET['s'])    : '';
+        $has_filters       = $filter_order_id > 0 || $filter_creator_id > 0 || $search !== '';
+        $creators          = $this->get_creator_options();
+        ?>
+        <div class="alignleft actions">
+            <label class="screen-reader-text" for="filter_order_id"><?php esc_html_e('Filtra per N. Ordine', 'wcp'); ?></label>
+            <input type="number" id="filter_order_id" name="filter_order_id" min="1"
+                   value="<?php echo $filter_order_id > 0 ? esc_attr((string) $filter_order_id) : ''; ?>"
+                   placeholder="N. Ordine" style="width:110px;">
+
+            <?php if (!empty($creators)) : ?>
+                <label class="screen-reader-text" for="filter_creator_id"><?php esc_html_e('Filtra per Creatore', 'wcp'); ?></label>
+                <select id="filter_creator_id" name="filter_creator_id">
+                    <option value=""><?php esc_html_e('— Tutti i creatori —', 'wcp'); ?></option>
+                    <?php foreach ($creators as $uid => $label) : ?>
+                        <option value="<?php echo esc_attr((string) $uid); ?>"
+                            <?php selected($filter_creator_id, $uid); ?>>
+                            <?php echo esc_html($label); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            <?php endif; ?>
+
+            <?php submit_button('Filtra', 'button', 'wcp_filter', false); ?>
+
+            <?php if ($has_filters) : ?>
+                <a href="<?php echo esc_url(admin_url('admin.php?page=wcp-manager')); ?>" class="button">
+                    <?php esc_html_e('Reset filtri', 'wcp'); ?>
+                </a>
+            <?php endif; ?>
+        </div>
+        <?php
+    }
+
     public function prepare_items() {
-        $per_page      = 20;
-        $current_page  = $this->get_pagenum();
-        $search        = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
-        $orderby_raw   = isset($_GET['orderby']) ? sanitize_text_field($_GET['orderby']) : 'post_date';
-        $order_raw     = isset($_GET['order']) ? strtoupper(sanitize_text_field($_GET['order'])) : 'DESC';
+        $per_page          = 20;
+        $current_page      = $this->get_pagenum();
+        $search            = isset($_GET['s'])                  ? sanitize_text_field($_GET['s'])    : '';
+        $orderby_raw       = isset($_GET['orderby'])            ? sanitize_text_field($_GET['orderby']) : 'post_date';
+        $order_raw         = isset($_GET['order'])              ? strtoupper(sanitize_text_field($_GET['order'])) : 'DESC';
+        $filter_order_id   = isset($_GET['filter_order_id'])    ? intval($_GET['filter_order_id'])   : 0;
+        $filter_creator_id = isset($_GET['filter_creator_id'])  ? intval($_GET['filter_creator_id']) : 0;
 
         $orderby = in_array($orderby_raw, ['post_title', 'post_date'], true) ? $orderby_raw : 'post_date';
         $order   = in_array($order_raw, ['ASC', 'DESC'], true) ? $order_raw : 'DESC';
 
-        $all_posts = get_posts([
+        $query_args = [
             'post_type'      => 'wcp_user_activation',
             'post_status'    => 'publish',
             'posts_per_page' => -1,
             'orderby'        => $orderby,
             'order'          => $order,
-        ]);
+        ];
+
+        if ($filter_creator_id > 0) {
+            $query_args['author'] = $filter_creator_id;
+        }
+
+        if ($filter_order_id > 0) {
+            $query_args['meta_query'] = [
+                [
+                    'key'     => 'wcp_order_id',
+                    'value'   => $filter_order_id,
+                    'compare' => '=',
+                    'type'    => 'NUMERIC',
+                ],
+            ];
+        }
+
+        $all_posts = get_posts($query_args);
 
         if ($search !== '') {
             $all_posts = array_values(array_filter($all_posts, function ($post) use ($search) {
                 if (stripos($post->post_title, $search) !== false) {
                     return true;
                 }
-                $email = (string) get_post_meta($post->ID, 'wcp_email', true);
-                $full_name = trim((string) get_post_meta($post->ID, 'wcp_first_name', true) . ' ' . (string) get_post_meta($post->ID, 'wcp_last_name', true));
-                return stripos($email, $search) !== false || stripos($full_name, $search) !== false;
+                $email      = (string) get_post_meta($post->ID, 'wcp_email', true);
+                $full_name  = trim((string) get_post_meta($post->ID, 'wcp_first_name', true) . ' ' . (string) get_post_meta($post->ID, 'wcp_last_name', true));
+                $created_by = (string) get_post_meta($post->ID, 'wcp_created_by_display', true);
+                return stripos($email, $search) !== false
+                    || stripos($full_name, $search) !== false
+                    || stripos($created_by, $search) !== false;
             }));
         }
 
@@ -117,7 +205,26 @@ class WCP_Coupons_Table extends WP_List_Table {
 
             case 'order_id':
                 $oid = (int) get_post_meta($item->ID, 'wcp_order_id', true);
-                return $oid > 0 ? esc_html((string) $oid) : '&mdash;';
+                if ($oid <= 0) {
+                    return '&mdash;';
+                }
+                $edit_url = get_edit_post_link($oid);
+                if ($edit_url) {
+                    return '<a href="' . esc_url($edit_url) . '" target="_blank">#' . esc_html((string) $oid) . '</a>';
+                }
+                return '#' . esc_html((string) $oid);
+
+            case 'created_by':
+                $display = (string) get_post_meta($item->ID, 'wcp_created_by_display', true);
+                if ($display !== '') {
+                    return esc_html($display);
+                }
+                // Fallback: use post_author data for records created before this feature.
+                $author = get_userdata((int) $item->post_author);
+                if ($author) {
+                    return esc_html(sprintf('%s (%s)', $author->user_login, $author->user_email));
+                }
+                return '&mdash;';
 
             case 'post_date':
                 return esc_html(date_i18n('d/m/Y H:i', strtotime($item->post_date)));

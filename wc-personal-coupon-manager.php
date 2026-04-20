@@ -406,6 +406,10 @@ class WC_Personal_Coupon_Manager {
         update_post_meta($post_id, 'wcp_order_id',          $lot['order_id']);
         update_post_meta($post_id, 'wcp_order_item_id',     $lot['order_item_id']);
         update_post_meta($post_id, 'wcp_credit_product_id', $lot['product_id']);
+        update_post_meta($post_id, 'wcp_created_by_user_id', $user_id);
+        if (isset($payload['created_by'])) {
+            update_post_meta($post_id, 'wcp_created_by_display', $payload['created_by']);
+        }
 
         $new_remaining = $this->get_user_remaining_credit($user_id);
 
@@ -620,12 +624,21 @@ class WC_Personal_Coupon_Manager {
         require_once plugin_dir_path(__FILE__) . 'includes/class-wcp-coupons-table.php';
         $table = new WCP_Coupons_Table($this);
         $table->prepare_items();
+
+        $filter_order_id   = isset($_GET['filter_order_id'])   ? intval($_GET['filter_order_id'])   : 0;
+        $filter_creator_id = isset($_GET['filter_creator_id']) ? intval($_GET['filter_creator_id']) : 0;
         ?>
         <div class="wrap">
             <h1 class="wp-heading-inline">WC User Activation Manager &mdash; Storico attivazioni</h1>
             <hr class="wp-header-end">
             <form method="get">
                 <input type="hidden" name="page" value="wcp-manager">
+                <?php if ($filter_order_id > 0) : ?>
+                    <input type="hidden" name="filter_order_id" value="<?php echo esc_attr((string) $filter_order_id); ?>">
+                <?php endif; ?>
+                <?php if ($filter_creator_id > 0) : ?>
+                    <input type="hidden" name="filter_creator_id" value="<?php echo esc_attr((string) $filter_creator_id); ?>">
+                <?php endif; ?>
                 <?php $table->search_box('Cerca attivazione', 'wcp_activation_search'); ?>
                 <?php $table->display(); ?>
             </form>
