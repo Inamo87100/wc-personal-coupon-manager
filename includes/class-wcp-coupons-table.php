@@ -291,10 +291,19 @@ class WCP_Coupons_Table extends WP_List_Table {
                 return esc_html(date_i18n('d/m/Y H:i', strtotime($item->post_date)));
 
             case 'actions':
-                return '<button class="button wcp-unenroll-btn" '
-                    . 'data-id="' . esc_attr($item->ID) . '" '
-                    . 'data-nonce="' . esc_attr(wp_create_nonce('wcp_nonce')) . '" '
-                    . 'style="color:#b32d2e;">Annulla</button>';
+                $delete_url = wp_nonce_url(
+                    add_query_arg(
+                        [
+                            'action'        => 'wcp_admin_unenroll',
+                            'activation_id' => $item->ID,
+                        ],
+                        admin_url('admin-post.php')
+                    ),
+                    'wcp_admin_unenroll'
+                );
+                return '<a href="' . esc_url($delete_url) . '" class="button" style="color:#b32d2e;" '
+                    . 'onclick="return confirm(\'Sei sicuro di voler eliminare questa attivazione? L\\u0027operazione chiamer\\u00e0 il sito remoto e non sar\\u00e0 reversibile.\');">'
+                    . 'Elimina</a>';
 
             default:
                 return '&mdash;';
