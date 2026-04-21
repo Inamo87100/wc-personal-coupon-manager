@@ -224,6 +224,15 @@ class WC_Personal_Coupon_Manager {
         return $remaining;
     }
 
+    public function get_user_remaining_registrations($user_id) {
+        $lots      = $this->get_credit_lots($user_id);
+        $remaining = 0;
+        foreach ($lots as $lot) {
+            $remaining += (int) ($lot['remaining_users'] ?? 0);
+        }
+        return max(0, (int) $remaining);
+    }
+
     private function consume_first_available_lot($user_id) {
         $lots = $this->get_credit_lots($user_id);
         foreach ($lots as $lot) {
@@ -262,9 +271,9 @@ class WC_Personal_Coupon_Manager {
             echo '<div class="wcpcm-form-container"><p>Non hai i permessi per accedere a questa sezione.</p></div>';
             return;
         }
-        $user_id          = get_current_user_id();
-        $credit_total     = $this->get_user_credit_total($user_id);
-        $credit_remaining = $this->get_user_remaining_credit($user_id);
+        $user_id                    = get_current_user_id();
+        $credit_remaining           = $this->get_user_remaining_credit($user_id);
+        $registrazioni_disponibili  = $this->get_user_remaining_registrations($user_id);
         $products_map     = $this->get_normalized_products_map();
         $current_user     = wp_get_current_user();
         $default_first    = get_user_meta($user_id, 'first_name', true);
@@ -278,8 +287,8 @@ class WC_Personal_Coupon_Manager {
         ?>
         <div class="wcpcm-form-container">
             <div class="wcpcm-credit-bar">
-                <span class="wcpcm-credit-label">Credito totale:</span>
-                <span class="wcpcm-credit-total">&euro;<?php echo number_format($credit_total, 2, ',', '.'); ?></span>
+                <span class="wcpcm-credit-label">Registrazioni disponibili:</span>
+                <span class="wcpcm-credit-total"><?php echo (int) $registrazioni_disponibili; ?></span>
                 <span class="wcpcm-credit-sep">|</span>
                 <span class="wcpcm-credit-label">Credito disponibile:</span>
                 <span class="wcpcm-credit-remaining" id="wcp-credit-remaining">&euro;<?php echo number_format($credit_remaining, 2, ',', '.'); ?></span>
