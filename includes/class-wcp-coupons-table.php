@@ -291,6 +291,8 @@ class WCP_Coupons_Table extends WP_List_Table {
                 return esc_html(date_i18n('d/m/Y H:i', strtotime($item->post_date)));
 
             case 'actions':
+                // Use server-side admin-post handler to ensure remote unenroll + local delete,
+                // without relying on JS/AJAX.
                 $delete_url = wp_nonce_url(
                     add_query_arg(
                         [
@@ -301,9 +303,10 @@ class WCP_Coupons_Table extends WP_List_Table {
                     ),
                     'wcp_admin_unenroll'
                 );
+
                 return '<a href="' . esc_url($delete_url) . '" class="button" style="color:#b32d2e;" '
-                    . 'onclick="return confirm(\'Sei sicuro di voler eliminare questa attivazione? L\\u0027operazione chiamer\\u00e0 il sito remoto e non sar\\u00e0 reversibile.\');">'
-                    . 'Elimina</a>';
+                    . 'onclick="return confirm(\'Annullare questa registrazione? Verrà chiamato il sito remoto e la riga verrà eliminata.\');">'
+                    . 'Annulla</a>';
 
             default:
                 return '&mdash;';
