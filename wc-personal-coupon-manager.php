@@ -10,6 +10,9 @@ if (!defined('ABSPATH')) exit;
 class WC_Personal_Coupon_Manager {
     private const VALID_COST_PATTERN          = '/^(?:\d+|\d*\.\d+)$/';
     private const CREDIT_VALIDATION_TOLERANCE = 0.001;
+    // Site B returns this message when Tutor LMS meta keys are absent, even though the
+    // unenroll actually succeeded. We must treat it as non-blocking so we still clean up locally.
+    private const TUTOR_META_WARNING_MSG = 'impossibile annullare enrollment: meta key non trovate o metodo tutor lms mancante';
 
     public function __construct() {
         add_action('init', [$this, 'add_my_account_endpoint']);
@@ -549,6 +552,13 @@ class WC_Personal_Coupon_Manager {
 
         if (!$success) {
             if (stripos((string) $msg, 'non trovato') !== false || stripos((string) $msg, 'not found') !== false) {
+                $user_not_found = true;
+            }
+
+            // Site B sometimes completes the unenroll but still returns success=false with this
+            // specific message when Tutor LMS meta keys are absent on its side. Treat it as
+            // a successful unenroll so we still rollback credit and delete the local record.
+            if (stripos(trim((string) $msg), self::TUTOR_META_WARNING_MSG) !== false) {
                 $user_not_found = true;
             }
         }
