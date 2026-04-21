@@ -13,7 +13,8 @@
 .wcpcm-credit-bar {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;      /* CHANGED: evita di andare a capo */
+    white-space: nowrap;    /* ADDED: evita spezzature del testo */
     gap: 0.5em;
     background: #eaf0fe;
     border: 1px solid #d1e1fc;
@@ -90,13 +91,19 @@
         padding-right: 0.45em;
         font-size: 0.96em;
     }
+
+    /* CHANGED: non mettiamo più in colonna; manteniamo una riga e,
+       se non entra, facciamo scroll orizzontale */
     .wcpcm-credit-bar {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.25em;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.5em;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
+
     .wcpcm-credit-sep {
-        display: none;
+        display: inline;
     }
 }
 
