@@ -22,6 +22,7 @@ class WC_Personal_Coupon_Manager {
         add_action('admin_menu', [$this, 'register_admin_menu']);
         add_action('admin_post_wcp_save_settings', [$this, 'save_settings']);
         add_action('admin_post_wcp_generate_secret', [$this, 'generate_secret_key']);
+        add_action('admin_post_wcp_admin_unenroll', [$this, 'handle_admin_unenroll']);
         add_action('admin_notices', [$this, 'admin_notices_wcp']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
     }
@@ -491,6 +492,81 @@ class WC_Personal_Coupon_Manager {
             'remaining_credit' => number_format($new_remaining, 2, ',', '.'),
             'post_id'          => $activation_id,
         ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // Admin: delete activation (type B – calls remote unenroll first)
+    // -------------------------------------------------------------------------
+
+    public function handle_admin_unenroll() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('Non hai i permessi per eseguire questa azione.', 'wcp'));
+        }
+
+        check_admin_referer('wcp_admin_unenroll');
+
+        $activation_id = isset($_GET['activation_id']) ? intval($_GET['activation_id']) : 0;
+
+        // Build redirect URL preserving active filters
+        $redirect_args = ['page' => 'wcp-manager'];
+        foreach (['s', 'orderby', 'order', 'filter_order_id', 'filter_creator_id', 'paged'] as $param) {
+            if (!empty($_GET[$param])) {
+                $redirect_args[$param] = sanitize_text_field($_GET[$param]);
+            }
+        }
+        $redirect_base = add_query_arg($redirect_args, admin_url('admin.php'));
+
+        if (!$activation_id) {
+            wp_safe_redirect(add_query_arg('wcp_error', urlencode('ID attivazione non valido.'), $redirect_base));
+            exit;
+        }
+
+        $post = get_post($activation_id);
+        if (!$post || $post->post_type !== 'wcp_user_activation' || $post->post_status !== 'publish') {
+            wp_safe_redirect(add_query_arg('wcp_error', urlencode('Attivazione non trovata.'), $redirect_base));
+            exit;
+        }
+
+        $email         = (string) get_post_meta($activation_id, 'wcp_email',        true);
+        $course_id     = (int)    get_post_meta($activation_id, 'wcp_course_id',     true);
+        $order_item_id = (int)    get_post_meta($activation_id, 'wcp_order_item_id', true);
+        $cost          = (float)  get_post_meta($activation_id, 'wcp_credit_cost',   true);
+
+        $response = $this->call_remote_api('/wp-json/nf/v1/unenroll-user', 'POST', [
+            'action'     => 'unenroll_user',
+            'user_email' => $email,
+            'course_id'  => $course_id,
+        ]);
+
+        if (is_wp_error($response)) {
+            wp_safe_redirect(add_query_arg('wcp_error', urlencode('Errore di connessione al sito remoto: ' . $response->get_error_message()), $redirect_base));
+            exit;
+        }
+
+        $success        = isset($response['success']) ? (bool) $response['success'] : false;
+        $msg            = isset($response['msg'])     ? $response['msg']     : (isset($response['message']) ? $response['message'] : '');
+        $user_not_found = false;
+
+        if (!$success) {
+            if (stripos((string) $msg, 'non trovato') !== false || stripos((string) $msg, 'not found') !== false) {
+                $user_not_found = true;
+            }
+        }
+
+        if (!$success && !$user_not_found) {
+            wp_safe_redirect(add_query_arg('wcp_error', urlencode($msg ?: 'Errore durante la disiscrizione.'), $redirect_base));
+            exit;
+        }
+
+        // Success or user_not_found: rollback lot and delete record
+        if ($order_item_id > 0 && $cost > 0) {
+            $this->rollback_lot_consumption((int) $post->post_author, $order_item_id, $cost);
+        }
+
+        wp_delete_post($activation_id, true);
+
+        wp_safe_redirect(add_query_arg('wcp_message', urlencode('Attivazione eliminata con successo.'), $redirect_base));
+        exit;
     }
 
     // -------------------------------------------------------------------------
