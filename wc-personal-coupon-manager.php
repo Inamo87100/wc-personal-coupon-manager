@@ -298,6 +298,7 @@ class WC_Personal_Coupon_Manager {
                 <span class="wcpcm-credit-remaining" id="wcp-credit-remaining">&euro;<?php echo number_format($credit_remaining, 2, ',', '.'); ?></span>
             </div>
             <h2 style="margin-bottom:1em;color:#274690;">Registrazione corsista su Nuova Formamentis</h2>
+            <p class="wcpcm-note">Prestare la massima attenzione durante la compilazione: i dati inseriti non saranno modificabili in seguito.</p>
             <form id="wcp-create-user-form" class="wcpcm-create-coupon-form">
                 <div class="wcpcm-form-group">
                     <label class="wcpcm-label" for="wcp-course">Corso <span style="color:red">*</span></label>
