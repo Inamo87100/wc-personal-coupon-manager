@@ -925,7 +925,7 @@ class WC_Personal_Coupon_Manager {
                 </table>
 
                 <h2>2. Prodotti che generano credito (Sito A)</h2>
-                <p>Definisci i prodotti di Sito A che generano credito, il credito generato, gli utenti creabili e il costo per registrazione (deve valere: credito generato = utenti &times; costo per utente).</p>
+                <p>Definisci i prodotti di Sito A che generano credito, il credito generato, gli utenti creabili e il costo per registrazione. Il credito generato deve essere &ge; utenti &times; costo per utente. Se il credito generato supera utenti &times; costo per utente, il credito eccedente (resto) non è utilizzabile e verrà ignorato.</p>
                 <div id="wcp-credit-products-map">
                     <?php
                     if (!empty($credit_products_map)) {
@@ -1080,11 +1080,11 @@ class WC_Personal_Coupon_Manager {
                 continue;
             }
 
-            if (abs($cg - ($ua * $cpu)) > self::CREDIT_VALIDATION_TOLERANCE) {
-                $expected = $ua * $cpu;
+            if ($cg < ($ua * $cpu) - self::CREDIT_VALIDATION_TOLERANCE) {
+                $required = $ua * $cpu;
                 $error_msg = urlencode(sprintf(
-                    'Errore validazione prodotto ID %d: credito generato (%.2f) deve essere uguale a utenti (%d) × costo per utente (%.2f) = %.2f.',
-                    $pid, $cg, $ua, $cpu, $expected
+                    'Errore validazione prodotto ID %d: credito generato (%.2f) è inferiore al credito richiesto: utenti (%d) × costo per utente (%.2f) = %.2f. Il credito generato deve essere maggiore o uguale al credito richiesto.',
+                    $pid, $cg, $ua, $cpu, $required
                 ));
                 wp_redirect(admin_url('admin.php?page=wcp-settings&wcp_error=' . $error_msg));
                 exit;
