@@ -242,3 +242,92 @@
     opacity: 0.6;
     cursor: not-allowed;
 }
+
+/* --- Search form above activations table --- */
+.wcpcm-search-form {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    flex-wrap: wrap;
+    margin-bottom: 1.2em;
+}
+
+.wcpcm-search-input {
+    flex: 1 1 220px;
+    min-width: 180px;
+    max-width: 340px;
+    min-height: 38px;
+    margin-bottom: 0;
+}
+
+.wcpcm-search-btn {
+    width: auto;
+    padding: 0.5em 1.2em;
+    font-size: 0.97em;
+    margin-top: 0;
+}
+
+.wcpcm-search-reset {
+    width: auto;
+    padding: 0.5em 1em;
+    font-size: 0.97em;
+    margin-top: 0;
+    background: linear-gradient(90deg,#888 60%,#555 100%);
+    text-decoration: none;
+    display: inline-block;
+}
+
+.wcpcm-search-reset:hover,
+.wcpcm-search-reset:focus {
+    background: linear-gradient(90deg,#555 10%,#888 100%);
+}
+
+/* --- Pagination controls --- */
+.wcpcm-pagination {
+    display: flex;
+    align-items: center;
+    gap: 0.35em;
+    flex-wrap: wrap;
+    margin-top: 1.1em;
+    font-size: 0.97em;
+}
+
+.wcpcm-page-link,
+.wcpcm-page-current {
+    display: inline-block;
+    padding: 0.35em 0.75em;
+    border-radius: 6px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid #d1e1fc;
+    min-width: 2em;
+    text-align: center;
+}
+
+.wcpcm-page-link {
+    background: #eaf0fe;
+    color: #274690;
+    transition: background 0.15s;
+}
+
+.wcpcm-page-link:hover,
+.wcpcm-page-link:focus {
+    background: #3971e6;
+    color: #fff;
+    border-color: #3971e6;
+}
+
+.wcpcm-page-current {
+    background: #274690;
+    color: #fff;
+    border-color: #274690;
+    cursor: default;
+}
+
+.wcpcm-page-ellipsis {
+    display: inline-block;
+    padding: 0.35em 0.4em;
+    color: #888;
+    font-weight: 600;
+    user-select: none;
+}

@@ -329,7 +329,11 @@ class WC_Personal_Coupon_Manager {
         </div>
         <div class="wcpcm-table-container">
             <h3 style="color:#274690; margin:1.8em 0 0.8em 0;">Storico attivazioni utenti</h3>
-            <?php $this->list_activations($user_id); ?>
+            <?php
+            $wcp_page  = isset($_GET['wcp_page'])  ? max(1, absint($_GET['wcp_page']))  : 1;
+            $wcp_email = isset($_GET['wcp_email']) ? sanitize_email(wp_unslash($_GET['wcp_email'])) : '';
+            $this->list_activations($user_id, $wcp_page, $wcp_email);
+            ?>
         </div>
         <?php
     }
@@ -584,18 +588,51 @@ class WC_Personal_Coupon_Manager {
     // List activations
     // -------------------------------------------------------------------------
 
-    public function list_activations($user_id) {
-        $posts = get_posts([
+    public function list_activations($user_id, $paged = 1, $email_search = '') {
+        $per_page = 20;
+
+        $query_args = [
             'post_type'      => 'wcp_user_activation',
             'post_status'    => 'publish',
             'author'         => $user_id,
-            'posts_per_page' => 50,
+            'posts_per_page' => $per_page,
+            'paged'          => $paged,
             'orderby'        => 'date',
             'order'          => 'DESC',
-        ]);
+            'no_found_rows'  => false,
+        ];
+
+        if ($email_search !== '') {
+            $query_args['meta_query'] = [
+                [
+                    'key'     => 'wcp_email',
+                    'value'   => $email_search,
+                    'compare' => '=',
+                ],
+            ];
+        }
+
+        $query         = new WP_Query($query_args);
+        $posts         = $query->posts;
+        $max_num_pages = (int) $query->max_num_pages;
+
+        $base_url = wc_get_account_endpoint_url('registrazione-corsista');
+
+        ?>
+        <form class="wcpcm-search-form" method="get" action="<?php echo esc_url($base_url); ?>">
+            <input class="wcpcm-input wcpcm-search-input" type="email" name="wcp_email"
+                   value="<?php echo esc_attr($email_search); ?>"
+                   placeholder="Cerca per email esatta&hellip;">
+            <button class="wcpcm-btn wcpcm-search-btn" type="submit">Cerca</button>
+            <?php if ($email_search !== '') : ?>
+                <a class="wcpcm-btn wcpcm-search-reset" href="<?php echo esc_url($base_url); ?>">Reset</a>
+            <?php endif; ?>
+        </form>
+        <?php
 
         if (!$posts) {
             echo '<p>Nessuna attivazione trovata.</p>';
+            wp_reset_postdata();
             return;
         }
 
@@ -629,6 +666,55 @@ class WC_Personal_Coupon_Manager {
         }
 
         echo '</tbody></table>';
+
+        if ($max_num_pages > 1) {
+            echo '<div class="wcpcm-pagination">';
+
+            $prev_page = $paged - 1;
+            if ($prev_page >= 1) {
+                $prev_args = ['wcp_page' => $prev_page];
+                if ($email_search !== '') {
+                    $prev_args['wcp_email'] = $email_search;
+                }
+                echo '<a class="wcpcm-page-link" href="' . esc_url(add_query_arg($prev_args, $base_url)) . '">&laquo; Prec</a>';
+            }
+
+            $window = 2; // pages to show on each side of current page
+            $ellipsis_printed = false;
+            for ($i = 1; $i <= $max_num_pages; $i++) {
+                $in_window = ($i === 1 || $i === $max_num_pages || abs($i - $paged) <= $window);
+                if (!$in_window) {
+                    if (!$ellipsis_printed) {
+                        echo '<span class="wcpcm-page-ellipsis">&hellip;</span>';
+                        $ellipsis_printed = true;
+                    }
+                    continue;
+                }
+                $ellipsis_printed = false;
+                if ($i === $paged) {
+                    echo '<span class="wcpcm-page-current">' . esc_html((string) $i) . '</span>';
+                } else {
+                    $page_args = ['wcp_page' => $i];
+                    if ($email_search !== '') {
+                        $page_args['wcp_email'] = $email_search;
+                    }
+                    echo '<a class="wcpcm-page-link" href="' . esc_url(add_query_arg($page_args, $base_url)) . '">' . esc_html((string) $i) . '</a>';
+                }
+            }
+
+            $next_page = $paged + 1;
+            if ($next_page <= $max_num_pages) {
+                $next_args = ['wcp_page' => $next_page];
+                if ($email_search !== '') {
+                    $next_args['wcp_email'] = $email_search;
+                }
+                echo '<a class="wcpcm-page-link" href="' . esc_url(add_query_arg($next_args, $base_url)) . '">Succ &raquo;</a>';
+            }
+
+            echo '</div>';
+        }
+
+        wp_reset_postdata();
     }
 
     // -------------------------------------------------------------------------
