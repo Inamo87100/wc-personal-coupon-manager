@@ -31,6 +31,10 @@ jQuery(function ($) {
             valid = false;
             errors.push("Inserisci un'email valida.");
             $('#wcp-email').css('border-color', '#c0392b');
+        } else if (window.wcp_ajax && wcp_ajax.current_user_email && email.toLowerCase().trim() === wcp_ajax.current_user_email) {
+            valid = false;
+            errors.push("Non puoi usare la tua email account per la registrazione del corsista. Inserisci l'email del cliente.");
+            $('#wcp-email').css('border-color', '#c0392b');
         } else {
             $('#wcp-email').css('border-color', '');
         }
