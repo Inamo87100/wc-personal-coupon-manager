@@ -96,11 +96,13 @@ class WC_Personal_Coupon_Manager {
                 wp_enqueue_style('wcp-style', plugin_dir_url(__FILE__) . 'style.css', [], $style_version);
                 wp_enqueue_script('wcp-ajax', plugin_dir_url(__FILE__) . 'wcp-scripts.js', ['jquery'], $script_version, true);
                 $user_id = get_current_user_id();
+                $current_user_data = $user_id > 0 ? get_userdata($user_id) : false;
                 wp_localize_script('wcp-ajax', 'wcp_ajax', [
-                    'ajax_url'         => admin_url('admin-ajax.php'),
-                    'nonce'            => wp_create_nonce('wcp_nonce'),
-                    'unenroll_nonce'   => wp_create_nonce('wcp_nonce'),
-                    'remaining_credit' => $this->get_user_remaining_credit($user_id),
+                    'ajax_url'           => admin_url('admin-ajax.php'),
+                    'nonce'              => wp_create_nonce('wcp_nonce'),
+                    'unenroll_nonce'     => wp_create_nonce('wcp_nonce'),
+                    'remaining_credit'   => $this->get_user_remaining_credit($user_id),
+                    'current_user_email' => $current_user_data ? strtolower(trim((string) $current_user_data->user_email)) : '',
                 ]);
             }
         }
@@ -299,6 +301,7 @@ class WC_Personal_Coupon_Manager {
             </div>
             <h2 style="margin-bottom:1em;color:#274690;">Registrazione corsista su Nuova Formamentis</h2>
             <p class="wcpcm-note">Prestare la massima attenzione durante la compilazione: i dati inseriti non saranno modificabili in seguito.</p>
+            <p class="wcpcm-note" style="margin-top:-0.75em;margin-bottom:1em;"><strong style="color:#b00020;">AVVISO: I dati inseriti DEVONO essere del cliente, altrimenti la registrazione non andrà a buon fine.</strong></p>
             <form id="wcp-create-user-form" class="wcpcm-create-coupon-form">
                 <div class="wcpcm-form-group">
                     <label class="wcpcm-label" for="wcp-course">Corso <span style="color:red">*</span></label>
@@ -359,6 +362,12 @@ class WC_Personal_Coupon_Manager {
 
         if (!$course_id || !$email || !$first_name || !$last_name || !is_email($email)) {
             wp_send_json_error(['msg' => "Compila tutti i campi obbligatori e inserisci un'email valida."]);
+        }
+
+        // Prevent using own account email for the activation.
+        $current_user_obj = wp_get_current_user();
+        if ($current_user_obj && strtolower(trim($current_user_obj->user_email)) === strtolower(trim($email))) {
+            wp_send_json_error(['msg' => "Non puoi usare la tua email account per la registrazione del corsista. Inserisci l'email del cliente."]);
         }
 
         $selected_entry = $this->get_products_map_entry_by_course_id($course_id);
