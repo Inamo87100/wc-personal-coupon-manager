@@ -301,7 +301,7 @@ class WC_Personal_Coupon_Manager {
             </div>
             <h2 style="margin-bottom:1em;color:#274690;">Registrazione corsista su Nuova Formamentis</h2>
             <p class="wcpcm-note">Prestare la massima attenzione durante la compilazione: i dati inseriti non saranno modificabili in seguito.</p>
-            <p class="wcpcm-note" style="margin-top:-0.75em;margin-bottom:1em;"><strong style="color:#b00020;">AVVISO: I dati inseriti DEVONO essere del cliente, altrimenti la registrazione non andrà a buon fine.</strong></p>
+            <p class="wcpcm-note" style="margin-top:-0.75em;margin-bottom:1em;"><strong style="color:#b00020;">AVVISO: I dati inseriti DEVONO appartenere al cliente; in caso contrario, la registrazione non andrà a buon fine.</strong></p>
             <form id="wcp-create-user-form" class="wcpcm-create-coupon-form">
                 <div class="wcpcm-form-group">
                     <label class="wcpcm-label" for="wcp-course">Corso <span style="color:red">*</span></label>
